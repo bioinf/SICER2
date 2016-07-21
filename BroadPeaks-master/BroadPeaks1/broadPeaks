@@ -1,0 +1,102 @@
+#!/usr/bin/env python
+
+import logging
+import time
+import argparse
+
+"""
+# if python setup.py install --home=~
+import sys
+sys.path.append('/home/<username>/lib/python/BroadPeaks1/')
+"""
+import arguments
+import output
+import broadpeaks_wo_control
+import broadpeaks_with_control
+
+startTime = time.time()
+
+# ALL TO main()
+
+parser = argparse.ArgumentParser(description="Tool for ChiP-seq analysis to find broad peaks")
+
+parser.add_argument('infile', help="Path to `input.bam` file", type=str)
+parser.add_argument('-w', dest='window_size', help="Window size (bp).  DEFAULT: 200", type=int, default=200)
+parser.add_argument('-g', dest='gap', help="Gap size shows how many windows could be skipped. DEFAULT: 1",
+                    type=int, default=1, choices=[1, 2, 3])
+parser.add_argument('-t', dest='threshold', help="Island score threshold. DEFAULT: 0", type=int, default=0)
+parser.add_argument('-o', dest='outdir', help="Path to directory for output `*_peaks.bed` file. "
+                                              "DEFAULT: output will be in the same directory as `input.bam`",
+                    type=str, default="")
+parser.add_argument('-n', dest="output_name", help="Specify output name. "
+                                                   "DEFAULT : an input file name + "
+                                                   "`W<window size (bp)>_G<gap size (bp)>_peaks.bed`", type=str)
+parser.add_argument('-e', help="Proportion of effective genome length; has to be in range(0.0, 1.0) DEFAULT: 0.77",
+                    type=float, default=0.77)
+parser.add_argument('-c', dest='control', help="Path to `control.bam` file. DEFAULT: no control file",
+                    type=str, default="")
+parser.add_argument('-log_name', help="Specify LOG file name."
+                                       "DEFAULT : `input_log.log`", type=str, default="")
+parser.add_argument('-log_dir', help="Specify path to directory where to write LOG file."
+                                       "DEFAULT : log file will be in the same directory as output",
+                    type=str, default="")
+parser.add_argument('--merge_log', help="Merge logs from all runs in one LOG file. "
+                                  "DEFAULT : LOG file contains information only from the last run", action='store_true')
+parser.add_argument('--stop_verbosity', help="Stops printing logs to terminal, just to LOG file", action='store_true')
+
+# parser.add_argument('-p', dest='p_value', help="p-value; has to be in range(0.0, 1.0). DEFAULT: 0.01", type=float, default=0.01)
+# parser.add_argument('-ref', dest='reference genome', help="Reference genome.  DEFAULT: 'hg19'", type=str, default='hg19')
+
+"""
+INPUT ARGUMENTS:
+
+see broadPeaks.py -h or --help
+bam_path = "/home/dima/BAMfiles/Bernstein_H1_hESC_CTCF.bam"
+"/home/dima/BAMfiles/h3k4me3_rep1.bam"
+'/home/yegor/Alex_project/H3K4me3.bam'
+"""
+# args as list of strings
+# args = parser.parse_args(['/media/user/DISK1/SICER_project/Inputs_mouse/GSM1288312.bam'])
+# ["/home/user/SICERproj/BAMfiles/H3K4Me3_test.bam"
+# ['/home/yegor/copy_chrM.bam', '-n', 'problems']
+#args = parser.parse_args(['/media/user/DISK1/SICER_project/BAM_files/H3K4Me3_test.bam', '-n', 'with_control_and_FDR_calculate_fdr', '-c', '/media/user/DISK1/SICER_project/BAM_files/test_control.bam', '-o', '/media/user/DISK1/SICER_project/BAM_files/our_control'])
+
+args = parser.parse_args(['/media/user/DISK1/SICER_project/BAM_files/H3K4Me3_test.bam', '-n', 'additive_fdr', '-c', '/media/user/DISK1/SICER_project/BAM_files/test_control.bam', '-o', '/media/user/DISK1/SICER_project/BAM_files/our_control'])
+#args = parser.parse_args(['/media/user/DISK1/SICER_project/BAM_files/H3K4Me3_test.bam','-o', '/media/user/DISK1/SICER_project/BAM_files/our_control', '-n', 'solo_H3K4Me3_test', '-log_name', 'solo_H3K4Me3_test'])
+#args = parser.parse_args(['/media/user/DISK1/SICER_project/BroadPeaks/chrM.bam'])
+
+# args = parser.parse_args(['/media/user/DISK1/SICER_project/BAM_files/Bernstein_H1_hESC_H3K4me3.bam', '-c', '/media/user/DISK1/SICER_project/BAM_files/Bernstein_H1_hESC_Control.bam', '-o', '/media/user/DISK1/SICER_project/BAM_files/real_control'])
+# args = parser.parse_args(['/media/user/DISK1/SICER_project/BAM_files/H3K4Me3_test.bam'])
+
+bam_path = arguments.check_input(args.infile)
+WINDOW_SIZE = args.window_size
+GAP = args.gap
+if args.outdir:
+    arguments.make_log(bam_path, args.outdir, args.log_name, args.merge_log, args.stop_verbosity, WINDOW_SIZE, GAP)
+else:
+    arguments.make_log(bam_path, args.log_dir, args.log_name, args.merge_log, args.stop_verbosity, WINDOW_SIZE, GAP)
+EFFECTIVE_PROPORTION = arguments.check_effective_proportion(args.e)
+ISLAND_SCORE_THRESHOLD = args.threshold
+outfile = arguments.check_outfile(args.outdir, args.output_name, bam_path, WINDOW_SIZE, GAP)
+control_path = arguments.check_control(args.control)
+# p0 = arguments.check_p_value(args.p_value)
+p0 = 0.1
+
+
+# main_functions
+arguments.write_run_information(bam_path, WINDOW_SIZE, GAP, ISLAND_SCORE_THRESHOLD, EFFECTIVE_PROPORTION,
+                                control_path, outfile)
+
+if not control_path:
+    island_list = broadpeaks_wo_control.broadpeaks_wo_control(bam_path, WINDOW_SIZE, GAP,
+                                                              EFFECTIVE_PROPORTION, ISLAND_SCORE_THRESHOLD, p0)
+else:
+    island_list = broadpeaks_with_control.broadpeaks_with_control(bam_path, control_path, WINDOW_SIZE, GAP,
+                                                                  EFFECTIVE_PROPORTION, ISLAND_SCORE_THRESHOLD, p0)
+
+
+logging.info("\nStep 4 of 4\nWRITING FOUND ISLANDS TO `{}` BED FILE\n".format(outfile))
+output.write_output(outfile, island_list, ISLAND_SCORE_THRESHOLD)
+
+
+logging.info("Finished. Elapsed time, minutes: " + str((time.time() - startTime) / 60))
