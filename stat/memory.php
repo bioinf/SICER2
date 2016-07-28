@@ -14,8 +14,8 @@ while (true) {
 		if (!$data[$pid]) $data[$pid] = [];
 		$mem = []; $sum = 0;
 		exec("cat /proc/$pid/status | grep VmSize | awk {'print $2,$3'}", $mem);
-		foreach ($mem as $m) $sum += (int) $m;
-		$data[$pid][] = [time(), $m];
+		foreach ($mem as $m) $sum += (int) $mem;
+		$data[$pid][] = [time(), $sum];
 		echo "$pid\tMemory: $m\n";
 	}
 	usleep(100000);
