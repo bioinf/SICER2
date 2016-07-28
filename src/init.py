@@ -17,7 +17,7 @@ class AParser(argparse.ArgumentParser) :
     print 'Optional arguments:'
     print '  -t,  --input      Path to `input.bam` file'
     print '  -o,  --output     Output file name'
-    print '  -c,  --control    Path to `control.bam` file.  DEFAULT: no control file'
+    # print '  -c,  --control    Path to `control.bam` file.  DEFAULT: no control file'
     print '  -w,  --window     Window size (bp).  DEFAULT: 200'
     print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]  DEFAULT: auto'
     print '  -g,  --gap        Gap size shows how many bases could be skipped  DEFAULT: 200'
