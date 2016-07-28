@@ -1,11 +1,15 @@
 #!/usr/bin/php
+# Usage:
+# ./memory.php ibezdvornykh
+
 <?php
-# ./mem.php
-$data = [];
+$data = []; 
 $x = 0;
+$file = 'memtest.' . time() . '.json';
 while (true) {
+	$user = $_SERVER['argv'][1];
 	$pids = [];
-	exec("ps -u bezdvornyhi | grep \"python\" | awk {'print $1'}", $pids);
+	exec("ps -u {$user} | grep \"python\" | awk {'print $1'}", $pids);
 	foreach ($pids as $pid) {
 		if (!$data[$pid]) $data[$pid] = [];
 		$mem = []; $sum = 0;
@@ -17,10 +21,10 @@ while (true) {
 	usleep(100000);
 	$x++;
 	if ($x%10 == 0) {
-		$f = fopen('memory.txt', 'w+');
+		$f = fopen($file, 'w+');
 		fputs($f, json_encode($data));
 		fclose($f);
-		echo "Saved!\n";
+		echo "> $file; Saved!\n";
 	}
 }
 
