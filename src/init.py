@@ -60,7 +60,7 @@ if args.track.name[-4:] == '.bam' :
 else :
   logfile = args.track.name + '_output.log'
   resultf = args.track.name + '_peaks.bed'
-if args.output.name :
+if args.output :
   resultf = args.output.name #  + '_peaks.bed'
 
 logging.basicConfig(filename = logfile, level = logging.DEBUG, format = '%(message)s')
