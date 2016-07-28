@@ -222,7 +222,7 @@ def make_windows_list(info, l0, window_size, gap, normalization_coef):
   return info
 
 def write_islands_list(info, lambdaa, wsize, l0, threshold, resultf):
-  f = open(resultf, 'w+'); islands = 0; coverage = 0
+  islands = 0; coverage = 0; result = []
 
   def score(reads):
     if reads >= l0:
@@ -234,9 +234,13 @@ def write_islands_list(info, lambdaa, wsize, l0, threshold, resultf):
     return window_score
 
   def write(c, e) :
-    if e['score'] < threshold : return 0, 0
-    f.write(c+'\t'+str(e['from'])+'\t'+str(e['to'])+'\t'+str(e['score'])+'\t'+str(e['reads'])+'\t'+str(e['count'] - e['gaps'])+'\t'+str(e['gaps'])+'\n')
+    # if e['score'] < threshold : return 0, 0
+    # f.write(c+'\t'+str(e['from'])+'\t'+str(e['to'])+'\t'+str(e['score'])+'\t'+str(e['reads'])+'\t'+str(e['count'] - e['gaps'])+'\t'+str(e['gaps'])+'\n')
     return 1, (e['to'] - e['from'])
+
+  def wformat(c, e) :
+    if e['score'] < threshold : return 0, 0
+    return (c+'\t'+str(e['from'])+'\t'+str(e['to'])+'\t'+str(e['score'])+'\t'+str(e['reads'])+'\t'+str(e['count'] - e['gaps'])+'\t'+str(e['gaps'])+'\n'), (e['to'] - e['from'])
 
   def new_island(init, reads):
     return { 
@@ -265,15 +269,28 @@ def write_islands_list(info, lambdaa, wsize, l0, threshold, resultf):
           if reads == 0 : island['gaps'] += 1
         # Other island
         else :
-          i, cov = write(c, island)
-          islands += i; coverage += cov
+          i, cov = wformat(c, island)
+          if cov > 0 :
+            islands += 1
+            coverage += cov
+            result.append(i)
+
           island = new_island(init, reads)
     # <- end for
     if island :
-      i, cov = write(c, island)
-      islands += i; coverage += cov
+      i, cov = wformat(c, island)
+      if cov > 0 :
+        islands += 1
+        coverage += cov
+        result.append(i)
+
+      # i, cov = write(c, island)
+      # islands += i; coverage += cov
       # islands += write(c, island)
 
   # <- end for
+  f = open(resultf, 'w+')
+  for line in result :
+    f.write(line)
   f.close()
   return islands, coverage
