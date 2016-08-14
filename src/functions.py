@@ -30,13 +30,15 @@ def parser(data_generator):
   p = 0
   while True:
     try:
-      while len(chunk) < p+36: chunk = chunk[p:] + next(data_generator); p = 0
-      block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq                          = unpack('<iiiBBHHHi'   ,chunk[p:p+24])
-      while len(chunk) < p + 4 + block_size: chunk = chunk[p:] + next(data_generator); p = 0
+        while len(chunk) < p+36: chunk = chunk[p:] + next(data_generator); p = 0
+        block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq                          = unpack('<iiiBBHHHi'   ,chunk[p:p+24])
+        while len(chunk) < p + 4 + block_size: chunk = chunk[p:] + next(data_generator); p = 0
     except StopIteration: break
     end = p + block_size + 4
+    p += 36
+    qname = chunk[p:p+l_read_name-1]
     p = end
-    yield pos,refID,flag,l_seq
+    yield pos,refID,flag,l_seq,qname
 
 
 # ---------------------------------------------------------------------------- #
@@ -48,74 +50,149 @@ def chrsort(s) :
     return 40
   return 999
 
+
+# ---------------------------------------------------------------------------- #
+def beautiful_table(data, cols = 3) :
+  t = lambda A : [list(x) for x in zip(*A)] # Транспонирование
+  r = (len(data) - len(data)%cols)/cols + 1 # Число строк в столбце
+  T = []
+  for i in range(0, len(data), r):
+    col = data[i:i + r]
+    while len(col) <= r : 
+      col.append(len(col[0]) * [' '])
+    col = t(col)
+    siz = map(lambda c : max(map(lambda x : len(str(x)), c)), col)
+    # ¯\_(ツ)_/¯
+    for i in range(len(col)) :
+      k = map(lambda x : str(x) + (siz[i] - len(str(x)) + 1) * " ", col[i])
+      T.append(k)
+    T.append(['  |  '] * r)
+  if len(T) == 0 : return ''
+  T = map(lambda x : ('').join(x), t(T[0:-1]))
+  V = (len(T[0])) * '-' + '\n'
+  return V + ('\n').join(T) + '\n' + V
+
+
+# ---------------------------------------------------------------------------- #
 def count_unique_reads(track, maxdr) :
-  reads = { 0 : 0, 16 : 0 }
-  drate = { 0 : 0, 16 : 0 }
-  lhist = {}
-  info = {}
-  
+  reads = {0: 0, 16: 0}; lhist = {}; info = {}
+  distance = { 'sum' : 0, 'count' : 0 }
+
   for read in parser(track) :
-    pos, chr, strand, l_seq = read
+    pos, chr, strand_key, l_seq, qname = read
+
     if chr < 0 or chr > len(track.chromosome_names) : continue
+    c = track.chromosome_names[chr]
     if l_seq not in lhist : lhist[l_seq] = 0
     lhist[l_seq] += 1
-    c = track.chromosome_names[chr]
+
     # New chromosome name:
     if c not in info : 
+      firsts = 0
       info[c] = {
-        'Data' : array.array('l', []), # position * 10 + strand indicator (0 or 1)
+        'Data'   : array.array('l', []),
         'Length' : track.chromosome_lengths[chr],
         'Unique reads' : 0,
-        'Total reads' : 0,
-        'Beginning of the previous' : 0
+        'Total reads'  : 0,
+        'Names' : {}
       }
-    # Два рида в одном месте
-    if pos == info[c]['Beginning of the previous'] :
-      drate[strand] += 1
-      if drate[strand] <= maxdr :
-        info[c]['Data'].append(10 * pos + (strand % 15))
-        info[c]['Unique reads'] += 1
-        reads[strand] += 1
-    else :
-      drate = { 0 : 0, 16 : 0 }
-      info[c]['Beginning of the previous'] = pos
-      info[c]['Data'].append(10 * pos + (strand % 15))
-      info[c]['Unique reads'] += 1
-      reads[strand] += 1
+
+    firsts += 1
+    if firsts < 300 :
+      if strand_key in [99,147,163,83] :
+        if qname not in info[c]['Names'] : 
+          info[c]['Names'][qname] = pos
+        else :
+          dist = abs(info[c]['Names'][qname] - pos)
+          if dist > 0 :
+            distance['sum'] += dist
+            distance['count'] += 1
+          #if dist not in distance : distance[dist] = 0
+          #distance[dist] += 1
+
     info[c]['Total reads'] += 1
-  # <- for
+    if strand_key not in reads : reads[strand_key] = 0
+    reads[strand_key] += 1
+
+    prev_key = 'Previous ' + str(strand_key)
+    ignore = False
+    if prev_key in info[c] :
+      if info[c][prev_key] == pos : ignore = True
+
+    if ignore == False :
+      info[c][prev_key] = pos
+      info[c]['Data'].append(1000 * pos + strand_key)
+      info[c]['Unique reads'] += 1
+    # <- if
+  # <- for read in parser(track)
 
   total_reads = 0; unique_reads = 0
-  logging.info("Chromosome, unique reads, total reads:")
 
   keys = info.keys()
   keys = sorted(keys, key = lambda (c): chrsort(c))
+  
+  tbl = []
   for c in keys :
+    tbl.append([c, info[c]['Unique reads'], info[c]['Total reads']])
     total_reads  += info[c]['Total reads']
     unique_reads += info[c]['Unique reads']
-    logging.info("{}\t{}\t{}".format(c, info[c]['Unique reads'], info[c]['Total reads']))
-  # <- for
-  
+  logging.info("Chromosome name, Unique reads, Total reads:")
+  logging.info(beautiful_table(tbl))
+
   mean_length = 0
   for l in lhist :
     mean_length += l * lhist[l]
   mean_length = mean_length/total_reads
 
-  logging.info('-' * 80)
-  
   msg = "Average read length: {}"
   logging.info(msg.format(mean_length))
 
-  msg = "Library depth: there are {} unique reads out of {}"
-  logging.info(msg.format(unique_reads, total_reads))
+  drate = round((1 - float(unique_reads)/float(total_reads)) * 100, 1)
+  msg = "\nLibrary depth\n  Duplication rate:  {}%\n  Total reads:       {}\n  Unique reads:      {}"
+  logging.info(msg.format(drate, total_reads, unique_reads))
+  
+  notes = [
+    [99 , "  - Reads mapped in proper pair. Mate reverse strand, first in pair:  {}"],
+    [147, "  - Reads mapped in proper pair. Read reverse strand, second in pair: {}"],
+    [83 , "  - Reads mapped in proper pair. Read reverse strand, first in pair:  {}"],
+    [163, "  - Reads mapped in proper pair. Mate reverse strand, second in pair: {}"],
+  			 
+    [97 , "  - Mate reverse strand, first in pair:                               {}"],
+    [161, "  - Mate reverse strand, second in pair:                              {}"],
+    [81 , "  - Read reverse strand, first in pair:                               {}"],
+    [145, "  - Read reverse strand, second in pair:                              {}"],
+  			 
+    [113, "  - Mate reverse strand, Read reverse strand, first in pair:          {}"],
+    [177, "  - Mate reverse strand, Read reverse strand, second in pair:         {}"],
+    [65 , "  - First in pair:                                                    {}"],
+    [129, "  - Second in pair:                                                   {}"],
+  			 
+    [73 , "  - Mate unmapped, first in pair:                                     {}"],
+    [137, "  - Mate unmapped, second in pair:                                    {}"],
+    [89 , "  - Mate unmapped, read reverse strand, first in pair:                {}"],
+    [153, "  - Mate unmapped, read reverse strand, second in pair:               {}"]
+  ]
 
-  msg = "Duplication rate: {}"
-  logging.info(msg.format(round(1 - float(unique_reads)/float(total_reads)*100, 1)))
+  def paired() :
+    for x in notes :
+      if x[0] in reads : return True
+    return False
 
-  msg = "Strand symmetry:\n  {} (+)\n  {} (-)"
-  logging.info(msg.format(reads[0], reads[16]))
+  logging.info("\nStrand symmetry")
+  fragment_size = fragmentsize
+  
+  if paired() :
+    if fragment_size == 0 : 
+      fragment_size = distance['sum']/distance['count'] + mean_length
+    for key, msg in notes :
+      logging.info(msg.format(reads[key] if key in reads else 0))
+  else :
+    logging.info(" [+]" + reads[0])
+    logging.info(" [-]" + reads[16])
 
-  return [unique_reads, mean_length, info]
+  logging.info("\nFragment size: " + str(fragment_size))
+  logging.info("")
+  return [unique_reads, mean_length, info, fragment_size]
 
 
 # ---------------------------------------------------------------------------- #
@@ -147,6 +224,7 @@ def get_gms(info, length, gms) :
     a1, v1 = GMS[specie][e]
     a2, v2 = GMS[specie][e + 1]
     if a2 >= length and a1 <= length :
+      # Интерполяция
       # (a2 - a1)/(v2 - v1) == (length - a1)/(x - v1)
       gms = (length - a1) * (v2 - v1)/(a2 - a1) + v1
 
@@ -157,8 +235,9 @@ def get_gms(info, length, gms) :
 
 
 # ---------------------------------------------------------------------------- #
-def count_effective_length(effective_proportion, track) :
-  return effective_proportion * sum(track.chromosome_lengths)
+def count_effective_length(gms, track) :
+  gms = get_gms(info, length, gms)
+  return gms * sum(track.chromosome_lengths)
 
 
 # ---------------------------------------------------------------------------- #
@@ -171,13 +250,10 @@ def count_lambda(unique_reads_count, wsize, effective_length):
 
 # ---------------------------------------------------------------------------- #
 def make_windows_list(info, l0, window_size, gap, normalization_coef):
-  msg = "Making eligible windows of {} bp with allowed gap_size {} bp"
-  logging.info(msg.format(window_size, window_size * gap))
-  logging.info('-' * 80)
-  logging.info("Chromosome, eligible windows:")
-
   keys = info.keys()
   keys = sorted(keys, key = lambda (c): chrsort(c))
+  tbl = []
+
   for c in keys :
     info[c]['Windows'] = array.array('l', [])
     previous = 0
@@ -187,8 +263,8 @@ def make_windows_list(info, l0, window_size, gap, normalization_coef):
     window_reads_count = 0
     chr_window = 0
     for read in info[c]['Data'] :
-      read_strand = read % 10
-      begin = (read - read_strand) / 10
+      read_strand = read % 1000
+      begin = (read - read_strand) / 1000
       if (begin != previous) or (read_strand != previous_read_strand):
         previous = begin
         previous_read_strand = read_strand
@@ -216,12 +292,24 @@ def make_windows_list(info, l0, window_size, gap, normalization_coef):
                 chr_window -= 1
             window_start += window_size
             window_reads_count = 0
+        # <- while
+    # <- for
     if window_reads_count != 0:
       info[c]['Windows'].append(max_window * window_start + window_reads_count)
-    logging.info("{}\t{}".format(c, chr_window))
+    tbl.append([c, chr_window])
+    
+    del info[c]['Data']
+    #for name in info[c] :
+    #  if name != 'Windows' : del info[c][name]
+
+  msg = "Eligible windows of {} bp with allowed gap_size {} bp"
+  logging.info(msg.format(window_size, window_size * gap))
+  msg = "Chromosome name, Eligible windows:\n{}"
+  logging.info(msg.format(beautiful_table(tbl)))
+
   return info
 
-def write_islands_list(info, lambdaa, wsize, l0, threshold, resultf):
+def write_islands(info, lambdaa, wsize, l0, threshold, resultf, offset):
   f = open(resultf, 'w+'); islands = 0; coverage = 0
 
   def score(reads):
@@ -240,9 +328,9 @@ def write_islands_list(info, lambdaa, wsize, l0, threshold, resultf):
 
   def new_island(init, reads):
     return { 
-      'from'  : init, 
-      'to'    : init + wsize, 
-      'score' : score(reads), 
+      'from'  : init,
+      'to'    : init + wsize,
+      'score' : score(reads),
       'reads' : reads, 
       'count' : 1, 
       'gaps'  : 0

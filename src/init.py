@@ -17,8 +17,10 @@ class AParser(argparse.ArgumentParser) :
     print 'Optional arguments:'
     print '  -t,  --input      Path to `input.bam` file'
     print '  -o,  --output     Output file name'
+    print '  -l,  --log        Output log file name'
     # print '  -c,  --control    Path to `control.bam` file.  DEFAULT: no control file'
     print '  -w,  --window     Window size (bp).  DEFAULT: 200'
+    print '  -f,  --fragment   Fragment size (bp).  DEFAULT: 250'
     print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]  DEFAULT: auto'
     print '  -g,  --gap        Gap size shows how many bases could be skipped  DEFAULT: 200'
     print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]  DEFAULT: 0.1'
@@ -38,8 +40,10 @@ class AParser(argparse.ArgumentParser) :
 parser = AParser()
 parser.add_argument('-t', '--track',     type = argparse.FileType('r'))
 parser.add_argument('-o', '--output',    type = argparse.FileType('w'))
+parser.add_argument('-l', '--log',       default = None)
 parser.add_argument('-c', '--control',   default = None, type = argparse.FileType('r'))
 parser.add_argument('-w', '--window',    default = 200, type = int)
+parser.add_argument('-f', '--fragment',  default = 'auto')
 parser.add_argument('-e', '--gms',       default = 'auto')
 parser.add_argument('-g', '--gap',       default = 200, type = int)
 parser.add_argument('-p', '--pvalue',    default = 0.1, type = float)
@@ -60,8 +64,9 @@ if args.track.name[-4:] == '.bam' :
 else :
   logfile = args.track.name + '_output.log'
   resultf = args.track.name + '_peaks.bed'
-if args.output :
-  resultf = args.output.name #  + '_peaks.bed'
+
+if args.log : logfile = args.log
+if args.output : resultf = args.output.name #  + '_peaks.bed'
 
 logging.basicConfig(filename = logfile, level = logging.DEBUG, format = '%(message)s')
 logging.info('=' * 80)
@@ -69,8 +74,21 @@ logging.info('Date: ' + datetime.datetime.strftime(datetime.datetime.now(), '%Y-
 logging.info('Command:')
 
 cmd = ['--track ' + str(args.track.name)]
+
+try :
+  fragmentsize = float(args.fragment)
+except :
+  fragmentsize = 0
+
 if args.control : cmd.append('--control ' + str(args.control.name))
-if args.output : cmd.append('--output ' + str(args.output.name))
+if args.output  : cmd.append('--output ' + str(args.output.name))
+if args.log     : cmd.append('--log ' + str(args.log))
+if fragmentsize > 0 : cmd.append('--fragment ' + str(fragmentsize))
+
+try :
+  gms = float(args.gms)
+except :
+  gms = 0
 
 cmd.extend([
   '--window ' + str(args.window),
@@ -79,5 +97,6 @@ cmd.extend([
   '--pvalue ' + str(args.pvalue),
   '--threshold ' + str(args.threshold)
 ])
+
 logging.info(sys.argv[0] + ' \\\n  ' + (' \\\n  ').join(cmd))
-logging.info('-' * 80)
+logging.info('')

@@ -4,43 +4,26 @@ import scipy, numpy, scipy.stats
 print 'Step 1 of 3: Counting unique reads'
 
 track = bgunzip(args.track.name)
-
-# if args.maxdr < 1 : args.maxdr = 1
-# reads, length, info = count_unique_reads(track, args.maxdr)
-reads, length, info = count_unique_reads(track, 1)
+reads, length, info, f_size = count_unique_reads(track, 1)
 
 control = False
 if args.control != None : control = bgunzip(args.control.name)
 
-# Effective proportion
-try :
-  gms = float(args.gms)
-except :
-  gms = 0
-
-gms = get_gms(info, length, gms)
-
-# Effective genome length
 effective_length = count_effective_length(gms, track)
 track.file_handle.close()
 
 if args.window > max_window : args.window = max_window
 if args.window < 10 : args.window = 10
 
-# Lambda for poisson distribution
 lambdaa = count_lambda(reads, args.window, effective_length)
-# if control : control_lambdaa = count_lambda(reads, args.window, effective_length)
 
-
-# Minimum count(reads) in a window for eligibility
-# Formula (1), finding l0
 pvalue = args.pvalue
-if pvalue > 1 or pvalue <= 0 : pvalue = 0.1
+if pvalue > 1 or pvalue <= 0 : pvalue = 0.2
 l0 = scipy.stats.poisson.ppf(1 - pvalue, lambdaa)
 
 msg = "Window read threshold is {} reads, " + \
-      "\n  i.e. {} is minimum number of reads in window to consider" + \
-      "\n  this window `eligible` with Poisson distribution p-value {}"
+      "\ni.e. {} is minimum number of reads in window to consider" + \
+      "\nthis window `eligible` with Poisson distribution p-value {}\n"
 logging.info(msg.format(l0, l0, pvalue))
 
 # ---------------------------------------------------------------------------- #
@@ -62,7 +45,7 @@ print 'Step 3 of 3: Writing found islands'
 if args.threshold < 0 : args.threshold = 0
 
 # found, coverage = write_islands_list(info, lambdaa, args.window, l0, args.threshold, resultf)
-found, coverage = write_islands_list(info, lambdaa, args.window, l0, args.threshold, resultf)
+found, coverage = write_islands(info, lambdaa, args.window, l0, args.threshold, resultf, f_size)
 coverage_txt = str(coverage) + 'bp'
 if coverage > 1000000 :
   coverage_txt = str(float(coverage)/1000000) + 'Mbp (' + coverage_txt + ')'
