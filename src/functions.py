@@ -251,9 +251,9 @@ def preparation(track, gms) :
 # ---------------------------------------------------------------------------- #
 def windows(data, length, window_size, gap_size):
   keys = sorted(data.keys(), key = lambda (c): chrsort(c))
-  wlist = {}; tbl = []
+  tbl = []
   for c in keys :
-    wlist[c] = array.array('l', [0])
+    wlist = array.array('l', [0])
     last_init = -max_window
     last_w_init_x = 0
     chr_window = 0
@@ -262,30 +262,31 @@ def windows(data, length, window_size, gap_size):
       w_init = init/window_size * window_size
       if last_init + window_size + gap_size > init - window_size :
         k = 1
-        while wlist[c][-1]/max_window < w_init :
-          wlist[c].append((last_w_init_x + k * window_size) * max_window + 0)
+        while wlist[-1]/max_window < w_init :
+          wlist.append((last_w_init_x + k * window_size) * max_window + 0)
           k += 1
-      if wlist[c][-1]/max_window == w_init :
-        wlist[c][-1] += 1
+      if wlist[-1]/max_window == w_init :
+        wlist[-1] += 1
         chr_window += 1
       else :
-        wlist[c].append(w_init * max_window + 1)
+        wlist.append(w_init * max_window + 1)
         chr_window += 1
       last_init = init
       last_w_init_x = last_init/window_size * window_size
     tbl.append([c, chr_window])
+    data[c] = wlist
 
   msg = "Eligible windows of {} bp with allowed gap_size {} bp"
   logging.info(msg.format(window_size, window_size * gap_size))
   msg = "Chromosome name, Eligible windows:\n{}"
   logging.info(msg.format(beautiful_table(tbl)))
-  return wlist
+  return data
 
 
 # ---------------------------------------------------------------------------- #
 def islands(wlist, l0, plambda, window_size, threshold, resultf):
   f = open(resultf, 'w+')
-  islands = 0; coverage = 0
+  islands = 0; coverage = 0; reads_scores = {}
 
   def score(reads):
     if reads <= l0 : return 0
@@ -296,7 +297,7 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
     return { 
       'from'  : init,
       'to'    : init + window_size,
-      'score' : score(reads),
+      'score' : reads_scores[reads],
       'reads' : reads, 
       'count' : 1, 
       'gaps'  : 0
@@ -307,8 +308,7 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
     f.write(chromosome  + '\t' 
       + str(e['from'])  + '\t'
       + str(e['to'])    + '\t'
-      + str(e['to'] - e ['from']) + '\t-\t-\t'
-      + str(e['score']) + '\t'
+      + str(e['score']) + '\t-\t-\t'
       + str(e['reads']) + '\t'
       + str(e['count'] - e['gaps']) + '\t'
       + str(e['gaps']) + '\n'
@@ -319,6 +319,7 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
     island = False
     for w in wlist[c] :
       reads, init = w%max_window, w/max_window
+      if reads not in reads_scores : reads_scores[reads] = score(reads)
       if not island :
         island = new_island(init, reads)
       else :
@@ -327,7 +328,7 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
           island['to'] += window_size
           island['count'] += 1
           island['reads'] += reads
-          island['score'] += score(reads)
+          island['score'] += reads_scores[reads]
           if reads == 0 : island['gaps'] += 1
         # Other island
         else :

@@ -47,13 +47,12 @@ logging.info(('\n ').join([
   "1. Chromosome name",
   "2. Island start",
   "3. Island end",
-  "4. Length of island region",
+  "4. Island score",
   "5. * Absolute peak summit position",
   "6. * Pileup height at peak summit, -log10(pvalue) for the peak summit",
-  "7. Island score",
-  "8. Number of reads in the island",
-  "9. Number of eligible windows per island",
-  "10. Number of gaps in the island"
+  "7. Number of reads in the island",
+  "8. Number of eligible windows per island",
+  "9. Number of gaps in the island"
 ]))
 
 msg = "Finished. Elapsed time, minutes: {}"

@@ -7,7 +7,7 @@ startTime = time.time()
 app = os.path.basename(__file__)
 max_window = 1000000
 
-# Красивый хелп
+# Beautiful --help
 class AParser(argparse.ArgumentParser) :
   def help_message(name = None) :
     print ''
@@ -18,13 +18,12 @@ class AParser(argparse.ArgumentParser) :
     print '  -t,  --input      Path to `input.bam` file'
     print '  -o,  --output     Output file name'
     print '  -l,  --log        Output log file name'
-    # print '  -c,  --control    Path to `control.bam` file.  DEFAULT: no control file'
-    print '  -w,  --window     Window size (bp).  DEFAULT: 200'
-    print '  -f,  --fragment   Fragment size (bp).  DEFAULT: 250'
-    print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]  DEFAULT: auto'
-    print '  -g,  --gap        Gap size shows how many bases could be skipped  DEFAULT: 200'
-    print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]  DEFAULT: 0.1'
-    print '  -x,  --threshold  Island score threshold  DEFAULT: 0'
+    print '  -w,  --window     Window size (in bp). Default: 200'
+    print '  -f,  --fragment   Fragment size (in bp). Default: 250'
+    print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]. Default: auto'
+    print '  -g,  --gap        Gap size shows how many bases could be skipped. Default: 200'
+    print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]. Default: 0.2'
+    print '  -x,  --threshold  Island score threshold. Default: 0'
     print ''
     print 'Examples:'
     print '  ./' + app + ' input.bam'
@@ -90,10 +89,11 @@ try :
 except :
   gms = 0
 
+gap_size = max(args.gap, args.window)
 cmd.extend([
   '--window ' + str(args.window),
   '--gms ' + str(args.gms),
-  '--gap ' + str(args.gap),
+  '--gap ' + str(gap_size),
   '--pvalue ' + str(args.pvalue),
   '--threshold ' + str(args.threshold)
 ])
@@ -103,75 +103,11 @@ logging.info('')
 # Source:
 # https://github.com/JohnLonginotto/pybam
 
-# import os
-# import sys
 import zlib
 import struct
 import itertools
 import subprocess
 
-##########################################
-## Documentation ? What documentation.. ##
-#########################################################################################################################################################
-##                                                                                                                                                     ##
-## Thank you for taking an interest in this program!                                                                                                   ##
-## Note that this is really a proof-of-concept rather than a fully-fledged alternative to any of the existing BAM -> Python shared modules like        ##
-## pysam and htspython. I just wanted to show that pure python is often as-fast-or-faster than shared C librarys, particularly if you're running pypy. ##
-## This is because every time python has to go out of the VM and talk to external things (like htslib), we take a huge performance hit. Its the        ##
-## program equivilent of walking to your car to go to the shops, when you might be able to cycle straight there in half the time.                      ##
-##                                                                                                                                                     ##
-## Particularly if your bicycle has rockets on it because you installed pypy.                                                                          ##
-##                                                                                                                                                     ##
-## If you would like to contribute to the project in anyway, please do. Better support for tags is greatly needed (ideally we need to find some data   ##
-## with some weird tag formats so we can figure out how to parse them), as well as more time spent improving the interface. If you dont like the name  ##
-## of something, or the way something looks/feels when you use pybam (or even the name pybam) we can change that :)                                    ##
-##                                                                                                                                                     ##
-#########################################################################################################################################################
-
-'''
-Awesome people who have directly contributed to the project so far:
-
-'''
-
-#############
-## bgunzip ##
-#########################################################################################################################################################
-##                                                                                                                                                     ##
-## There are only two parts to pybam. The first is the bgunzip class that will take either pure BAM or bgzip'd BAM data, decompress the blocks to pure ##
-## BAM, parse out the BAM header, and from then on act like a generator - where every time you iterate it, it give you a random chunk of BAM data,     ##
-## starting from the first read in the file (but blocks end randomly due to the way bgzip was originally designed to be data agnostic).                ##
-## So you initialize with a file handle or path, and an optional blocks_at_a_time parameter (how many bgzip blocks to decompress and give you back per ##
-## iteration), like so:                                                                                                                                ##
-##                                                                                                                                                     ##
-## >>>> pure_bam_data = pybam.bgunzip('./ENCFF001LCU.bam.gz')                                                                                          ##
-## >>>> pure_bam_data.chromosome_names                                                                                                                 ##
-## ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17' ... ##
-## >>>> pure_bam_data.chromosome_lengths                                                                                                               ##
-## [197195432, 181748087, 159599783, 155630120, 152537259, 149517037, 152524553, 131738871, 124076172, 129993255, 121843856, 121257530, 120284312, ... ##
-## >>>> pure_bam_data.chromosomes_from_header                                                                                                          ##
-## ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17' ... ##
-## >>>> pure_bam_data.header_text                                                                                                                      ##
-## '@SQ\tSN:chr1\tLN:197195432\tAS:mm9\tSP:mouse\n@SQ\tSN:chr2\tLN:181748087\tAS:mm9\tSP:mouse\n@SQ\tSN:chr3\tLN:159599783\tAS:mm9\tSP:mouse\n@SQ\ ... ##
-## >>>> pure_bam_data.original_binary_header                                                                                                           ##
-## <read-only buffer for 0x00007fbe9c1344e0, size 1161>                                                                                                ##
-##                                                                                                                                                     ##
-## You can use the original_binary_header to make a new BAM file, if that's your thing, but I wouldn't recommend it. Use the bam+ format instead.      ##
-##                                                                                                                                                     ##
-## Now you can iterate it like any other generator:                                                                                                    ##
-## >>>> first_50_blocks = next(pure_bam_data)    # 50 because that is the blocks_at_a_time default, or about 3Mb of BAM data                           ##
-## >>>> len(first_50_blocks)                                                                                                                           ##
-## 3275639                                                                                                                                             ##
-## >>>> first_50_blocks[:70]                                                                                                                           ##
-## '\x92\x00\x00\x00\x00\x00\x00\x00\xa6\xc9-\x00 \x00\x00\x13\x01\x00\x00\x00$\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00SOLEXA1 ... ##
-##                                                                                                                                                     ##
-## What a time to be alive.                                                                                                                            ##
-##                                                                                                                                                     ##
-## Truly, none of this could have been done without the already fantastic work by Peter Cock, author of the bgzip format and bgzf.py from Biopython.   ##
-## I'm sure he wouldn't mind me posting a link to his fantastic Bioinformatics blog, particularly this  post about bgzip and how it works for any kind ##
-## of data, not just BAM data: http://blastedbio.blogspot.de/2011/11/bgzf-blocked-bigger-better-gzip.html                                              ##
-## Although I didn't actually use any of Peter's code directly, I didn't need to, because he documents his code SO WELL in bgzf.py that I "got it" on  ##
-## the first read-through, and could re-impliment it optimized for PyPy which is what you see here below.                                              ##
-#########################################################################################################################################################
 class bgunzip:
     def __init__(self,file_handle,blocks_at_a_time=50):
         ## First we init some basic things so that we will fill up in a sec.
@@ -317,177 +253,6 @@ class bgunzip:
                 blocks_left_to_grab = self.blocks_at_a_time
         self.file_handle.close()
         if cache != '': yield ''.join(cache)
-
-
-
-####################
-## compile_parser ##
-#########################################################################################################################################################
-##                                                                                                                                                     ##
-## The second part of pybam is the compile_parser function, which returns a new runtime-generated function, which is what will actually parse you BAM. ##
-## We generate this code on-the-fly because doing so is much more efficient that having a whole bunch of "if x: else y" all over the place.            ##
-## Actually, the whole point of PyPy is to do exactly this sort of optimisation for you - it figures out that certain paths in your code never happen, ##
-## and optimises the code accordingly. However, pybam obviously needs to work on regular python too, so thats why i've done it "manually" here below.  ##
-## Some people take offence to the existence of exec(). These people also really really like PEP8, apart from maybe the second paragraph. meh.         ##
-##                                                                                                                                                     ##
-## You use it like this:                                                                                                                               ##
-##                                                                                                                                                     ##
-## >>>> pure_bam_data = pybam.bgunzip('./ENCFF001LCU.bam.gz')                                                                                          ##
-## >>>>                                                                                                                                                ##
-## >>>> parser = pybam.compile_parser(['pos','mapq','qname'])                                                                                          ##
-## >>>>                                                                                                                                                ##
-## >>>> for read in parser(pure_bam_data):                                                                                                             ##
-## ....     print read                                                                                                                                 ##
-## ....     break                                                                                                                                      ##
-## ....                                                                                                                                                ##
-## (3000742, 0, 'SOLEXA1_0001:4:49:11382:21230#0')                                                                                                     ##
-##                                                                                                                                                     ##
-## So we tell compile_parser how to make our function (that we called parser, but we could have called it anything) by passing it a list of special    ##
-## strings. We can see what the function compile_parser came up with by looking at "pybam.code" after compile_paser has run:                           ##
-##                                                                                                                                                     ##
-## >>>> print pybam.code                                                                                                                               ##
-##                                                                                                                                                     ##
-## def parser(data_generator):                                                                                                                         ##
-##     chunk = next(data_generator)                                                                                                                    ##
-##     CtoPy = { 'A':'<c', 'c':'<b', 'C':'<B', 's':'<h', 'S':'<H', 'i':'<i', 'I':'<I' }                                                                ##
-##     py4py = { 'A':  1,  'c':  1,  'C':  1,  's':  2,  'S':  2,  'i':  4 , 'I':  4  }                                                                ##
-##     dna = '=ACMGRSVTWYHKDBN'                                                                                                                        ##
-##     cigar_codes = 'MIDNSHP=X'                                                                                                                       ##
-##     from array import array                                                                                                                         ##
-##     from struct import unpack                                                                                                                       ##
-##     p = 0                                                                                                                                           ##
-##     while True:                                                                                                                                     ##
-##         try:                                                                                                                                        ##
-##             while len(chunk) < p+36: chunk = chunk[p:] + next(data_generator); p = 0                                                                ##
-##             block_size,refID,pos,l_read_name,mapq                                                     = unpack('<iiiBB'       ,chunk[p:p+14])       ##
-##             while len(chunk) < p + 4 + block_size: chunk = chunk[p:] + next(data_generator); p = 0                                                  ##
-##         except StopIteration: break                                                                                                                 ##
-##         end = p + block_size + 4                                                                                                                    ##
-##         p += 36                                                                                                                                     ##
-##         qname = chunk[p:p+l_read_name-1]                                                                                                            ##
-##         p = end                                                                                                                                     ##
-##         yield pos,mapq,qname                                                                                                                        ##
-##                                                                                                                                                     ##
-##                                                                                                                                                     ##
-## A'int that complicated eh. So now you're probably wondering what special strings exist. Well, for now thats only a few. Many more could be added to ##
-## do more abstract things, but right now we've got:                                                                                                   ##
-##                                                                                                                                                     ##
-#########################################################################################################################################################
-
-def compile_parser(fields):
-    deps = set(fields)
-    unpack = '''
-def parser(data_generator):
-    chunk = next(data_generator)
-    CtoPy = { 'A':'<c', 'c':'<b', 'C':'<B', 's':'<h', 'S':'<H', 'i':'<i', 'I':'<I' }
-    py4py = { 'A':  1,  'c':  1,  'C':  1,  's':  2,  'S':  2,  'i':  4 , 'I':  4  }
-    dna = '=ACMGRSVTWYHKDBN'
-    cigar_codes = 'MIDNSHP=X'
-    from array import array
-    from struct import unpack
-    p = 0
-    while True:
-        try:
-            while len(chunk) < p+36: chunk = chunk[p:] + next(data_generator); p = 0
-
-            '''
-
-    # Some values require the length of the previous values to be known before they can be grabbed. Add those to our 'dependency' list:
-    if  'tags' in deps or 'tags_bam'  in deps: deps.update(['qual_skip','seq_skip','l_seq_bytes','l_seq','cigar_skip','n_cigar_op','qname_skip','l_read_name','fixed_skip'])
-    if  'qual' in deps or 'qual_bam'  in deps: deps.update([            'seq_skip','l_seq_bytes','l_seq','cigar_skip','n_cigar_op','qname_skip','l_read_name','fixed_skip'])
-    if   'seq' in deps or 'seq_bam'   in deps: deps.update([                       'l_seq_bytes','l_seq','cigar_skip','n_cigar_op','qname_skip','l_read_name','fixed_skip'])
-    if 'cigar' in deps or 'cigar_bam' in deps: deps.update([                                                          'n_cigar_op','qname_skip','l_read_name','fixed_skip'])
-    if 'qname' in deps or 'qname_bam' in deps: deps.update([                                                                                    'l_read_name','fixed_skip'])
-
-    # Fixed length SAM data. Because its often quicker to unpack more data in a single stuct.unpack call than it is to unpack less data with 2 or more calls to unpack, the logic here
-    # is very simple - we unpack everything up until the value desired. It needs to be tested if this is actually holds true in real-world data though.
-    if   'tlen'        in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq,next_refID,next_pos,tlen = unpack('<iiiBBHHHiiii',chunk[p:p+36])"    ; fixed_length = 36
-    elif 'next_pos'    in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq,next_refID,next_pos      = unpack('<iiiBBHHHiii' ,chunk[p:p+32])"    ; fixed_length = 32
-    elif 'next_refID'  in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq,next_refID               = unpack('<iiiBBHHHii'  ,chunk[p:p+28])"    ; fixed_length = 28
-    elif 'l_seq'       in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag,l_seq                          = unpack('<iiiBBHHHi'   ,chunk[p:p+24])"    ; fixed_length = 24
-    elif 'flag'        in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op,flag                                = unpack('<iiiBBHHH'    ,chunk[p:p+20])"    ; fixed_length = 20
-    elif 'n_cigar_op'  in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_,n_cigar_op                                     = unpack('<iiiBBHH'     ,chunk[p:p+18])"    ; fixed_length = 18
-    elif 'bin'         in deps: unpack += "block_size,refID,pos,l_read_name,mapq,bin_                                                = unpack('<iiiBBH'      ,chunk[p:p+16])"    ; fixed_length = 16
-    elif 'mapq'        in deps: unpack += "block_size,refID,pos,l_read_name,mapq                                                     = unpack('<iiiBB'       ,chunk[p:p+14])"    ; fixed_length = 14
-    elif 'l_read_name' in deps: unpack += "block_size,refID,pos,l_read_name                                                          = unpack('<iiiB'        ,chunk[p:p+13])"    ; fixed_length = 13
-    elif 'pos'         in deps: unpack += "block_size,refID,pos                                                                      = unpack('<iii'         ,chunk[p:p+12])"    ; fixed_length = 12
-    elif 'refID'       in deps: unpack += "block_size,refID                                                                          = unpack('<ii'          ,chunk[p:p+8 ])"    ; fixed_length = 8
-    else:                       unpack += "block_size                                                                                = unpack('<i'           ,chunk[p:p+4 ])[0]" ; fixed_length = 4
-
-    # Fixed-length BAM data (where we just grab the bytes, we dont unpack) can, however, be grabbed individually.
-    if 'fixed_bam'       in deps: unpack += "\n            fixed_bam       = chunk[p:p+36]"    # All the fixed data.
-    if 'block_size_bam'  in deps: unpack += "\n            block_size_bam  = chunk[p:p+4]"
-    if 'refID_bam'       in deps: unpack += "\n            refID_bam       = chunk[p+4:p+8]"
-    if 'pos_bam'         in deps: unpack += "\n            pos_bam         = chunk[p+8:p+12]"
-    if 'l_read_name_bam' in deps: unpack += "\n            l_read_name_bam = chunk[p+12:p+13]"
-    if 'mapq_bam'        in deps: unpack += "\n            mapq_bam        = chunk[p+13:p+14]"
-    if 'bin_bam'         in deps: unpack += "\n            bin_bam         = chunk[p+14:p+16]"
-    if 'n_cigar_op_bam'  in deps: unpack += "\n            n_cigar_op_bam  = chunk[p+16:p+18]"
-    if 'flag_bam'        in deps: unpack += "\n            flag_bam        = chunk[p+18:p+20]"
-    if 'l_seq_bam'       in deps: unpack += "\n            l_seq_bam       = chunk[p+20:p+24]"
-    if 'next_refID_bam'  in deps: unpack += "\n            next_refID_bam  = chunk[p+24:p+28]"
-    if 'next_pos_bam'    in deps: unpack += "\n            next_pos_bam    = chunk[p+28:p+32]"
-    if 'tlen_bam'        in deps: unpack += "\n            tlen_bam        = chunk[p+32:p+36]"
-
-    unpack += '''
-            while len(chunk) < p + 4 + block_size: chunk = chunk[p:] + next(data_generator); p = 0
-        except StopIteration: break
-        end = p + block_size + 4
-'''
-
-    if 'variable_bam'in deps: unpack += "        variable_bam = chunk[p:end]\n"
-    if 'fixed_skip'  in deps: unpack += "        p += 36\n"
-    if 'qname_bam'   in deps: unpack += "        qname_bam = chunk[p:p+l_read_name]\n"
-    if 'qname'       in deps: unpack += "        qname = chunk[p:p+l_read_name-1]\n"
-    if 'qname_skip'  in deps: unpack += "        p += l_read_name\n"
-    if 'cigar'       in deps: unpack += "        cigar = [(cigar_codes[cig & 0b1111],cig>>4) for cig in array('I',chunk[p:p+(4*n_cigar_op)])]\n"
-    if 'cigar_bam'   in deps: unpack += "        cigar_bam = chunk[p:p+(4*n_cigar_op)]\n"
-    if 'cigar_skip'  in deps: unpack += "        p += n_cigar_op*4\n"
-    if 'l_seq_bytes' in deps: unpack += "        l_seq_bytes = -((-l_seq)//2)\n"
-    if 'seq'         in deps: unpack += "        seq = ''.join([ dna[bit4 >> 4] + dna[bit4 & 0b1111] for bit4 in array('B', chunk[p:p+l_seq_bytes]) ])\n"
-    if 'seq_bam'     in deps: unpack += "        seq_bam = chunk[p:p+l_seq_bytes]\n"
-    if 'seq_skip'    in deps: unpack += "        p += l_seq_bytes\n"
-    if 'qual'        in deps: unpack += "        qual = chunk[p:p+l_seq]\n"
-    if 'qual_bam'    in deps: unpack += "        qual_bam = chunk[p:p+l_seq]\n"
-    if 'qual_skip'   in deps: unpack += "        p += l_seq\n"
-    if 'tags_bam'    in deps: unpack += "        tags_bam = chunk[p:end]\n"
-    if 'tags'        in deps: unpack += '''
-        tags = []
-        while p != end:
-            tag_name = chunk[p:p+2]
-            tag_type = chunk[p+2]
-            if tag_type == 'Z':
-                p_end = chunk.index('\\0',p+3)+1
-                tag_data = chunk[p+3:p_end];  # I've opted to keep the NUL byte in the output, although it makes me feel dirty.
-            elif tag_type in CtoPy:
-                p_end = p+3+py4py[tag_type]
-                tag_data = unpack(CtoPy[tag_type],chunk[p+3:p_end])[0]
-            else:
-                print 'PROGRAMMER ERROR: I dont know how to parse BAM tags in this format: ',repr(tag_type)
-                print '                  This is simply because I never saw this kind of tag during development.'
-                print '                  If you could mail the following chunk of text to john at john.uk.com, ill fix this up :)'
-                print repr(tag_type),repr(chunk[p+3:end])
-                exit()
-            tags.append((tag_name,tag_type,tag_data))
-            p = p_end\n'''
-    unpack += '        p = end\n'
-    unpack += '        yield ' + ','.join([x for x in fields])
-    global code    # To allow user to view
-    code = unpack  # code with pybam.code
-
-    exec(unpack)  # "parser" now comes into existance
-    return parser
-
-#######################
-## THE END / CREDITS ##
-#########################################################################################################################################################
-##                                                                                                                                                     ##
-## Thats it!                                                                                                                                           ##
-## This code was written by John Longinotto, a PhD student of the Pospisilik Lab at the Max Planck Institute of Immunbiology & Epigenetics, Freiburg.  ##
-## My PhD is funded by the Deutsches Epigenom Programm (DEEP), and the Max Planck IMPRS Program.                                                       ##
-## I study Adipose Biology and Circadian Rhythm in mice, although it seems these days I spend most of my time at the computer and not at the bench.    ##
-##                                                                                                                                                     ##
-#########################################################################################################################################################
 # ---------------------------------------------------------------------------- #
 species = {
   'anoGam1': [62725911,59568033,53272125,48795086,41284009,22145176,15363],
@@ -619,23 +384,72 @@ def beautiful_table(data, cols = 3) :
 
 
 # ---------------------------------------------------------------------------- #
-def count_unique_reads(track, maxdr) :
-  reads = {0: 0, 16: 0}; lhist = {}; info = {}
+def get_gms(info, length, gms) :
+  if gms > 0 and gms <= 1 :
+    msg = "Using custom effective proportion: {}"
+    logging.info(msg.format(gms))
+    return gms
+  
+  specie, specie_name = define_specie(info)
+  GMS = {}
+  GMS['hg19'] = [[20,0.697969],[25,0.750921],[30,0.782328],[40,0.824712],[60,0.867066],[80,0.882649],[100,0.889473],[120,0.893435],[140,0.896156]]
+  GMS['mm10'] = [[25,0.766128],[30,0.790964],[40,0.822389],[60,0.857177],[80,0.875752],[100,0.88708],[120,0.894755],[140,0.900449]]
+
+  # Default value
+  if specie not in GMS : 
+    gms = 0.77
+    msg = "Using default effective proportion: {}"
+    logging.info(msg.format(gms))
+    return gms
+
+  # Approximation
+  if GMS[specie][0][0] > length :
+    gms = GMS[specie][0][1]
+  if GMS[specie][-1][0] < length :
+    gms = GMS[specie][-1][1]
+  
+  for e in range(0, len(GMS[specie]) - 1) :
+    a1, v1 = GMS[specie][e]
+    a2, v2 = GMS[specie][e + 1]
+    if a2 >= length and a1 <= length :
+      # Интерполяция
+      # (a2 - a1)/(v2 - v1) == (length - a1)/(x - v1)
+      gms = (length - a1) * (v2 - v1)/(a2 - a1) + v1
+
+  # ...
+  msg = "Using default effective proportion for {}: {}"
+  logging.info(msg.format(specie_name, gms))
+  return gms
+
+
+# ---------------------------------------------------------------------------- #
+def count_lambda(unique_reads_count, wsize, effective_length):
+  plambda = float(wsize) * float(unique_reads_count) / float(effective_length)
+  msg = "Average density of reads per {} bp window is {}"
+  logging.info(msg.format(wsize, round(plambda, 2)))
+  return plambda
+
+
+# ---------------------------------------------------------------------------- #
+def preparation(track, gms) :
+  length_hist = {}
   distance = { 'sum' : 0, 'count' : 0 }
+  reads = { 0 : 0, 16 : 0 }
+  info = {}
+  data = {}
 
   for read in parser(track) :
     pos, chr, strand_key, l_seq, qname = read
-
     if chr < 0 or chr > len(track.chromosome_names) : continue
     c = track.chromosome_names[chr]
-    if l_seq not in lhist : lhist[l_seq] = 0
-    lhist[l_seq] += 1
+    if l_seq not in length_hist : length_hist[l_seq] = 0
+    length_hist[l_seq] += 1
 
     # New chromosome name:
     if c not in info : 
       firsts = 0
+      data[c] = array.array('l', [])
       info[c] = {
-        'Data'   : array.array('l', []),
         'Length' : track.chromosome_lengths[chr],
         'Unique reads' : 0,
         'Total reads'  : 0,
@@ -644,7 +458,7 @@ def count_unique_reads(track, maxdr) :
 
     firsts += 1
     if firsts < 300 :
-      if strand_key in [99,147,163,83] :
+      if strand_key in [99,147,163,83] : # check paired reads
         if qname not in info[c]['Names'] : 
           info[c]['Names'][qname] = pos
         else :
@@ -652,8 +466,6 @@ def count_unique_reads(track, maxdr) :
           if dist > 0 :
             distance['sum'] += dist
             distance['count'] += 1
-          #if dist not in distance : distance[dist] = 0
-          #distance[dist] += 1
 
     info[c]['Total reads'] += 1
     if strand_key not in reads : reads[strand_key] = 0
@@ -666,13 +478,12 @@ def count_unique_reads(track, maxdr) :
 
     if ignore == False :
       info[c][prev_key] = pos
-      info[c]['Data'].append(1000 * pos + strand_key)
+      data[c].append(1000 * pos + strand_key)
       info[c]['Unique reads'] += 1
     # <- if
   # <- for read in parser(track)
 
   total_reads = 0; unique_reads = 0
-
   keys = info.keys()
   keys = sorted(keys, key = lambda (c): chrsort(c))
   
@@ -685,8 +496,8 @@ def count_unique_reads(track, maxdr) :
   logging.info(beautiful_table(tbl))
 
   mean_length = 0
-  for l in lhist :
-    mean_length += l * lhist[l]
+  for l in length_hist :
+    mean_length += l * length_hist[l]
   mean_length = mean_length/total_reads
 
   msg = "Average read length: {}"
@@ -732,169 +543,102 @@ def count_unique_reads(track, maxdr) :
     for key, msg in notes :
       logging.info(msg.format(reads[key] if key in reads else 0))
   else :
-    logging.info(" [+]" + reads[0])
-    logging.info(" [-]" + reads[16])
+    if fragment_size == 0 : 
+      fragment_size = 250
+    logging.info("  [+] " + str(reads[0]))
+    logging.info("  [-] " + str(reads[16]))
 
   logging.info("\nFragment size: " + str(fragment_size))
   logging.info("")
-  return [unique_reads, mean_length, info, fragment_size]
-
-
-# ---------------------------------------------------------------------------- #
-def get_gms(info, length, gms) :
-  if gms > 0 and gms <= 1 :
-    msg = "Using custom effective proportion: {}"
-    logging.info(msg.format(gms))
-    return gms
   
-  specie, specie_name = define_specie(info)
-  GMS = {}
-  GMS['hg19'] = [[20,0.697969],[25,0.750921],[30,0.782328],[40,0.824712],[60,0.867066],[80,0.882649],[100,0.889473],[120,0.893435],[140,0.896156]]
-  GMS['mm10'] = [[25,0.766128],[30,0.790964],[40,0.822389],[60,0.857177],[80,0.875752],[100,0.88708],[120,0.894755],[140,0.900449]]
+  effective_len = get_gms(info, mean_length, gms) * sum(track.chromosome_lengths)
+  plambda = count_lambda(unique_reads, args.window, effective_len)
 
-  # Default value
-  if specie not in GMS : 
-    gms = 0.77
-    msg = "Using default effective proportion: {}"
-    logging.info(msg.format(gms))
-    return gms
+  return [data, mean_length, fragment_size, plambda]
 
-  # Approximation
-  if GMS[specie][0][0] > length :
-    gms = GMS[specie][0][1]
-  if GMS[specie][-1][0] < length :
-    gms = GMS[specie][-1][1]
-  
-  for e in range(0, len(GMS[specie]) - 1) :
-    a1, v1 = GMS[specie][e]
-    a2, v2 = GMS[specie][e + 1]
-    if a2 >= length and a1 <= length :
-      # Интерполяция
-      # (a2 - a1)/(v2 - v1) == (length - a1)/(x - v1)
-      gms = (length - a1) * (v2 - v1)/(a2 - a1) + v1
-
-  # ...
-  msg = "Using default effective proportion for {}: {}"
-  logging.info(msg.format(specie_name, gms))
-  return gms
 
 
 # ---------------------------------------------------------------------------- #
-def count_effective_length(gms, track) :
-  gms = get_gms(info, length, gms)
-  return gms * sum(track.chromosome_lengths)
-
-
-# ---------------------------------------------------------------------------- #
-def count_lambda(unique_reads_count, wsize, effective_length):
-  lambdaa = float(wsize) * float(unique_reads_count) / float(effective_length)
-  msg = "Average density of reads per {} bp window is {}"
-  logging.info(msg.format(wsize, round(lambdaa, 2)))
-  return lambdaa
-
-
-# ---------------------------------------------------------------------------- #
-def make_windows_list(info, l0, window_size, gap, normalization_coef):
-  keys = info.keys()
-  keys = sorted(keys, key = lambda (c): chrsort(c))
+def windows(data, length, window_size, gap_size):
+  keys = sorted(data.keys(), key = lambda (c): chrsort(c))
   tbl = []
-
   for c in keys :
-    info[c]['Windows'] = array.array('l', [])
-    previous = 0
-    previous_read_strand = 0
-    gap_count = 0
-    window_start = 0
-    window_reads_count = 0
+    wlist = array.array('l', [0])
+    last_init = -max_window
+    last_w_init_x = 0
     chr_window = 0
-    for read in info[c]['Data'] :
-      read_strand = read % 1000
-      begin = (read - read_strand) / 1000
-      if (begin != previous) or (read_strand != previous_read_strand):
-        previous = begin
-        previous_read_strand = read_strand
-        gap_flag = True
-        while True:
-          if window_start <= begin < window_start + window_size:
-            window_reads_count += 1
-            break
-          elif begin < window_start:
-            break
-          else:
-            window_reads_count = int(float(window_reads_count) * normalization_coef)
-            if window_reads_count < l0:
-              gap_count += 1
-            else:
-              gap_flag = False
-              gap_count = 0
-            info[c]['Windows'].append(max_window * window_start + window_reads_count)
-            chr_window += 1
-            if gap_count > gap or gap_flag:
-              gap_flag = True
-              while gap_count > 0:
-                info[c]['Windows'].pop()
-                gap_count -= 1
-                chr_window -= 1
-            window_start += window_size
-            window_reads_count = 0
-        # <- while
-    # <- for
-    if window_reads_count != 0:
-      info[c]['Windows'].append(max_window * window_start + window_reads_count)
+    for read in data[c] :
+      strand, init = read%1000, read/1000
+      w_init = init/window_size * window_size
+      if last_init + window_size + gap_size > init - window_size :
+        k = 1
+        while wlist[-1]/max_window < w_init :
+          wlist.append((last_w_init_x + k * window_size) * max_window + 0)
+          k += 1
+      if wlist[-1]/max_window == w_init :
+        wlist[-1] += 1
+        chr_window += 1
+      else :
+        wlist.append(w_init * max_window + 1)
+        chr_window += 1
+      last_init = init
+      last_w_init_x = last_init/window_size * window_size
     tbl.append([c, chr_window])
-    
-    del info[c]['Data']
-    #for name in info[c] :
-    #  if name != 'Windows' : del info[c][name]
+    data[c] = wlist
 
   msg = "Eligible windows of {} bp with allowed gap_size {} bp"
-  logging.info(msg.format(window_size, window_size * gap))
+  logging.info(msg.format(window_size, window_size * gap_size))
   msg = "Chromosome name, Eligible windows:\n{}"
   logging.info(msg.format(beautiful_table(tbl)))
+  return data
 
-  return info
 
-def write_islands(info, lambdaa, wsize, l0, threshold, resultf, offset):
-  f = open(resultf, 'w+'); islands = 0; coverage = 0
+# ---------------------------------------------------------------------------- #
+def islands(wlist, l0, plambda, window_size, threshold, resultf):
+  f = open(resultf, 'w+')
+  islands = 0; coverage = 0; reads_scores = {}
 
   def score(reads):
-    if reads >= l0:
-      temp = scipy.stats.poisson.pmf(reads, lambdaa)
-      if temp < 1e-320: window_score = 1000
-      else: window_score = -numpy.log(temp)
-    else:
-      window_score = 0
-    return window_score
-
-  def write(c, e) :
-    if e['score'] < threshold : return 0, 0
-    f.write(c+'\t'+str(e['from'])+'\t'+str(e['to'])+'\t'+str(e['score'])+'\t'+str(e['reads'])+'\t'+str(e['count'] - e['gaps'])+'\t'+str(e['gaps'])+'\n')
-    return 1, (e['to'] - e['from'])
+    if reads <= l0 : return 0
+    t = scipy.stats.poisson.pmf(reads, plambda)
+    return 1000 if t < 1e-320 else -numpy.log(t)
 
   def new_island(init, reads):
     return { 
       'from'  : init,
-      'to'    : init + wsize,
-      'score' : score(reads),
+      'to'    : init + window_size,
+      'score' : reads_scores[reads],
       'reads' : reads, 
       'count' : 1, 
       'gaps'  : 0
     }
 
-  for c in info :
+  def write(chromosome, e) :
+    if e['score'] < threshold : return 0, 0
+    f.write(chromosome  + '\t' 
+      + str(e['from'])  + '\t'
+      + str(e['to'])    + '\t'
+      + str(e['score']) + '\t-\t-\t'
+      + str(e['reads']) + '\t'
+      + str(e['count'] - e['gaps']) + '\t'
+      + str(e['gaps']) + '\n'
+    )
+    return 1, (e['to'] - e['from'])
+
+  for c in wlist :
     island = False
-    for w in info[c]['Windows'] :
-      reads = w % max_window
-      init = (w - reads)/max_window
+    for w in wlist[c] :
+      reads, init = w%max_window, w/max_window
+      if reads not in reads_scores : reads_scores[reads] = score(reads)
       if not island :
         island = new_island(init, reads)
       else :
         # Same island
         if init == island['to'] :
-          island['to'] += wsize
+          island['to'] += window_size
           island['count'] += 1
           island['reads'] += reads
-          island['score'] += score(reads)
+          island['score'] += reads_scores[reads]
           if reads == 0 : island['gaps'] += 1
         # Other island
         else :
@@ -905,8 +649,6 @@ def write_islands(info, lambdaa, wsize, l0, threshold, resultf, offset):
     if island :
       i, cov = write(c, island)
       islands += i; coverage += cov
-      # islands += write(c, island)
-
   # <- end for
   f.close()
   return islands, coverage
@@ -916,22 +658,15 @@ import scipy, numpy, scipy.stats
 print 'Step 1 of 3: Counting unique reads'
 
 track = bgunzip(args.track.name)
-reads, length, info, f_size = count_unique_reads(track, 1)
-
-control = False
-if args.control != None : control = bgunzip(args.control.name)
-
-effective_length = count_effective_length(gms, track)
+data, length, fragment, plambda = preparation(track, gms)
 track.file_handle.close()
 
 if args.window > max_window : args.window = max_window
 if args.window < 10 : args.window = 10
 
-lambdaa = count_lambda(reads, args.window, effective_length)
-
 pvalue = args.pvalue
 if pvalue > 1 or pvalue <= 0 : pvalue = 0.2
-l0 = scipy.stats.poisson.ppf(1 - pvalue, lambdaa)
+l0 = scipy.stats.poisson.ppf(1 - pvalue, plambda)
 
 msg = "Window read threshold is {} reads, " + \
       "\ni.e. {} is minimum number of reads in window to consider" + \
@@ -943,43 +678,38 @@ logging.info(msg.format(l0, l0, pvalue))
 print 'Step 2 of 3: Making window list'
 
 if args.window < 1 : args.window = 1
-args.gap = args.gap/args.window
-if args.gap < 0 : args.gap = 0
+if args.gap < 1 : args.gap = 1
 
-NORM_CONSTANT = 1
-info = make_windows_list(info, l0, args.window, args.gap, NORM_CONSTANT)
-logging.info('-' * 80)
+wlist = windows(data, length, args.window, gap_size)
 
 # ---------------------------------------------------------------------------- #
 
 print 'Step 3 of 3: Writing found islands'
 
 if args.threshold < 0 : args.threshold = 0
+found, coverage = islands(wlist, l0, plambda, args.window, args.threshold, resultf)
 
-# found, coverage = write_islands_list(info, lambdaa, args.window, l0, args.threshold, resultf)
-found, coverage = write_islands(info, lambdaa, args.window, l0, args.threshold, resultf, f_size)
-coverage_txt = str(coverage) + 'bp'
+coverage_txt = str(coverage) + ' bp'
 if coverage > 1000000 :
-  coverage_txt = str(float(coverage)/1000000) + 'Mbp (' + coverage_txt + ')'
+  coverage_txt = str(float(coverage)/1000000) + ' Mbp (' + coverage_txt + ')'
 logging.info("Coverage: {}".format(coverage_txt))
 
-msg = "There are {} islands found"
-logging.info(msg.format(found))
-print msg.format(found)
+logging.info("Islands found: {}".format(found))
 
 logging.info(('\n ').join([
- "Column names in BED file:",
- "1. Chromosome name",
- "2. Island start",
- "3. Island end",
- "4. Island score",
- "5. Number of reads in the island",
- "6. Number of eligible windows per island",
- "7. Number of gaps in the island"
+  "Output file:",
+  "1. Chromosome name",
+  "2. Island start",
+  "3. Island end",
+  "4. Island score",
+  "5. * Absolute peak summit position",
+  "6. * Pileup height at peak summit, -log10(pvalue) for the peak summit",
+  "7. Number of reads in the island",
+  "8. Number of eligible windows per island",
+  "9. Number of gaps in the island"
 ]))
 
 msg = "Finished. Elapsed time, minutes: {}"
 logging.info(msg.format((time.time() - startTime) / 60))
 logging.info("")
-
 
