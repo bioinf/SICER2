@@ -7,7 +7,7 @@ startTime = time.time()
 app = os.path.basename(__file__)
 max_window = 1000000
 
-# Красивый хелп
+# Beautiful --help
 class AParser(argparse.ArgumentParser) :
   def help_message(name = None) :
     print ''
@@ -18,13 +18,12 @@ class AParser(argparse.ArgumentParser) :
     print '  -t,  --input      Path to `input.bam` file'
     print '  -o,  --output     Output file name'
     print '  -l,  --log        Output log file name'
-    # print '  -c,  --control    Path to `control.bam` file.  DEFAULT: no control file'
-    print '  -w,  --window     Window size (bp).  DEFAULT: 200'
-    print '  -f,  --fragment   Fragment size (bp).  DEFAULT: 250'
-    print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]  DEFAULT: auto'
-    print '  -g,  --gap        Gap size shows how many bases could be skipped  DEFAULT: 200'
-    print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]  DEFAULT: 0.1'
-    print '  -x,  --threshold  Island score threshold  DEFAULT: 0'
+    print '  -w,  --window     Window size (in bp). Default: 200'
+    print '  -f,  --fragment   Fragment size (in bp). Default: 250'
+    print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]. Default: auto'
+    print '  -g,  --gap        Gap size shows how many bases could be skipped. Default: 200'
+    print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]. Default: 0.2'
+    print '  -x,  --threshold  Island score threshold. Default: 0'
     print ''
     print 'Examples:'
     print '  ./' + app + ' input.bam'
@@ -90,10 +89,11 @@ try :
 except :
   gms = 0
 
+gap_size = max(args.gap, args.window)
 cmd.extend([
   '--window ' + str(args.window),
   '--gms ' + str(args.gms),
-  '--gap ' + str(args.gap),
+  '--gap ' + str(gap_size),
   '--pvalue ' + str(args.pvalue),
   '--threshold ' + str(args.threshold)
 ])

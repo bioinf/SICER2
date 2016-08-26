@@ -74,23 +74,72 @@ def beautiful_table(data, cols = 3) :
 
 
 # ---------------------------------------------------------------------------- #
-def count_unique_reads(track, maxdr) :
-  reads = {0: 0, 16: 0}; lhist = {}; info = {}
+def get_gms(info, length, gms) :
+  if gms > 0 and gms <= 1 :
+    msg = "Using custom effective proportion: {}"
+    logging.info(msg.format(gms))
+    return gms
+  
+  specie, specie_name = define_specie(info)
+  GMS = {}
+  GMS['hg19'] = [[20,0.697969],[25,0.750921],[30,0.782328],[40,0.824712],[60,0.867066],[80,0.882649],[100,0.889473],[120,0.893435],[140,0.896156]]
+  GMS['mm10'] = [[25,0.766128],[30,0.790964],[40,0.822389],[60,0.857177],[80,0.875752],[100,0.88708],[120,0.894755],[140,0.900449]]
+
+  # Default value
+  if specie not in GMS : 
+    gms = 0.77
+    msg = "Using default effective proportion: {}"
+    logging.info(msg.format(gms))
+    return gms
+
+  # Approximation
+  if GMS[specie][0][0] > length :
+    gms = GMS[specie][0][1]
+  if GMS[specie][-1][0] < length :
+    gms = GMS[specie][-1][1]
+  
+  for e in range(0, len(GMS[specie]) - 1) :
+    a1, v1 = GMS[specie][e]
+    a2, v2 = GMS[specie][e + 1]
+    if a2 >= length and a1 <= length :
+      # Интерполяция
+      # (a2 - a1)/(v2 - v1) == (length - a1)/(x - v1)
+      gms = (length - a1) * (v2 - v1)/(a2 - a1) + v1
+
+  # ...
+  msg = "Using default effective proportion for {}: {}"
+  logging.info(msg.format(specie_name, gms))
+  return gms
+
+
+# ---------------------------------------------------------------------------- #
+def count_lambda(unique_reads_count, wsize, effective_length):
+  plambda = float(wsize) * float(unique_reads_count) / float(effective_length)
+  msg = "Average density of reads per {} bp window is {}"
+  logging.info(msg.format(wsize, round(plambda, 2)))
+  return plambda
+
+
+# ---------------------------------------------------------------------------- #
+def preparation(track, gms) :
+  length_hist = {}
   distance = { 'sum' : 0, 'count' : 0 }
+  reads = { 0 : 0, 16 : 0 }
+  info = {}
+  data = {}
 
   for read in parser(track) :
     pos, chr, strand_key, l_seq, qname = read
-
     if chr < 0 or chr > len(track.chromosome_names) : continue
     c = track.chromosome_names[chr]
-    if l_seq not in lhist : lhist[l_seq] = 0
-    lhist[l_seq] += 1
+    if l_seq not in length_hist : length_hist[l_seq] = 0
+    length_hist[l_seq] += 1
 
     # New chromosome name:
     if c not in info : 
       firsts = 0
+      data[c] = array.array('l', [])
       info[c] = {
-        'Data'   : array.array('l', []),
         'Length' : track.chromosome_lengths[chr],
         'Unique reads' : 0,
         'Total reads'  : 0,
@@ -99,7 +148,7 @@ def count_unique_reads(track, maxdr) :
 
     firsts += 1
     if firsts < 300 :
-      if strand_key in [99,147,163,83] :
+      if strand_key in [99,147,163,83] : # check paired reads
         if qname not in info[c]['Names'] : 
           info[c]['Names'][qname] = pos
         else :
@@ -107,8 +156,6 @@ def count_unique_reads(track, maxdr) :
           if dist > 0 :
             distance['sum'] += dist
             distance['count'] += 1
-          #if dist not in distance : distance[dist] = 0
-          #distance[dist] += 1
 
     info[c]['Total reads'] += 1
     if strand_key not in reads : reads[strand_key] = 0
@@ -121,13 +168,12 @@ def count_unique_reads(track, maxdr) :
 
     if ignore == False :
       info[c][prev_key] = pos
-      info[c]['Data'].append(1000 * pos + strand_key)
+      data[c].append(1000 * pos + strand_key)
       info[c]['Unique reads'] += 1
     # <- if
   # <- for read in parser(track)
 
   total_reads = 0; unique_reads = 0
-
   keys = info.keys()
   keys = sorted(keys, key = lambda (c): chrsort(c))
   
@@ -140,8 +186,8 @@ def count_unique_reads(track, maxdr) :
   logging.info(beautiful_table(tbl))
 
   mean_length = 0
-  for l in lhist :
-    mean_length += l * lhist[l]
+  for l in length_hist :
+    mean_length += l * length_hist[l]
   mean_length = mean_length/total_reads
 
   msg = "Average read length: {}"
@@ -187,166 +233,98 @@ def count_unique_reads(track, maxdr) :
     for key, msg in notes :
       logging.info(msg.format(reads[key] if key in reads else 0))
   else :
-    logging.info(" [+]" + reads[0])
-    logging.info(" [-]" + reads[16])
+    if fragment_size == 0 : 
+      fragment_size = 250
+    logging.info("  [+] " + str(reads[0]))
+    logging.info("  [-] " + str(reads[16]))
 
   logging.info("\nFragment size: " + str(fragment_size))
   logging.info("")
-  return [unique_reads, mean_length, info, fragment_size]
-
-
-# ---------------------------------------------------------------------------- #
-def get_gms(info, length, gms) :
-  if gms > 0 and gms <= 1 :
-    msg = "Using custom effective proportion: {}"
-    logging.info(msg.format(gms))
-    return gms
   
-  specie, specie_name = define_specie(info)
-  GMS = {}
-  GMS['hg19'] = [[20,0.697969],[25,0.750921],[30,0.782328],[40,0.824712],[60,0.867066],[80,0.882649],[100,0.889473],[120,0.893435],[140,0.896156]]
-  GMS['mm10'] = [[25,0.766128],[30,0.790964],[40,0.822389],[60,0.857177],[80,0.875752],[100,0.88708],[120,0.894755],[140,0.900449]]
+  effective_len = get_gms(info, mean_length, gms) * sum(track.chromosome_lengths)
+  plambda = count_lambda(unique_reads, args.window, effective_len)
 
-  # Default value
-  if specie not in GMS : 
-    gms = 0.77
-    msg = "Using default effective proportion: {}"
-    logging.info(msg.format(gms))
-    return gms
+  return [data, mean_length, fragment_size, plambda]
 
-  # Approximation
-  if GMS[specie][0][0] > length :
-    gms = GMS[specie][0][1]
-  if GMS[specie][-1][0] < length :
-    gms = GMS[specie][-1][1]
-  
-  for e in range(0, len(GMS[specie]) - 1) :
-    a1, v1 = GMS[specie][e]
-    a2, v2 = GMS[specie][e + 1]
-    if a2 >= length and a1 <= length :
-      # Интерполяция
-      # (a2 - a1)/(v2 - v1) == (length - a1)/(x - v1)
-      gms = (length - a1) * (v2 - v1)/(a2 - a1) + v1
-
-  # ...
-  msg = "Using default effective proportion for {}: {}"
-  logging.info(msg.format(specie_name, gms))
-  return gms
 
 
 # ---------------------------------------------------------------------------- #
-def count_effective_length(gms, track) :
-  gms = get_gms(info, length, gms)
-  return gms * sum(track.chromosome_lengths)
-
-
-# ---------------------------------------------------------------------------- #
-def count_lambda(unique_reads_count, wsize, effective_length):
-  lambdaa = float(wsize) * float(unique_reads_count) / float(effective_length)
-  msg = "Average density of reads per {} bp window is {}"
-  logging.info(msg.format(wsize, round(lambdaa, 2)))
-  return lambdaa
-
-
-# ---------------------------------------------------------------------------- #
-def make_windows_list(info, l0, window_size, gap, normalization_coef):
-  keys = info.keys()
-  keys = sorted(keys, key = lambda (c): chrsort(c))
-  tbl = []
-
+def windows(data, length, window_size, gap_size):
+  keys = sorted(data.keys(), key = lambda (c): chrsort(c))
+  wlist = {}; tbl = []
   for c in keys :
-    info[c]['Windows'] = array.array('l', [])
-    previous = 0
-    previous_read_strand = 0
-    gap_count = 0
-    window_start = 0
-    window_reads_count = 0
+    wlist[c] = array.array('l', [0])
+    last_init = -max_window
+    last_w_init_x = 0
     chr_window = 0
-    for read in info[c]['Data'] :
-      read_strand = read % 1000
-      begin = (read - read_strand) / 1000
-      if (begin != previous) or (read_strand != previous_read_strand):
-        previous = begin
-        previous_read_strand = read_strand
-        gap_flag = True
-        while True:
-          if window_start <= begin < window_start + window_size:
-            window_reads_count += 1
-            break
-          elif begin < window_start:
-            break
-          else:
-            window_reads_count = int(float(window_reads_count) * normalization_coef)
-            if window_reads_count < l0:
-              gap_count += 1
-            else:
-              gap_flag = False
-              gap_count = 0
-            info[c]['Windows'].append(max_window * window_start + window_reads_count)
-            chr_window += 1
-            if gap_count > gap or gap_flag:
-              gap_flag = True
-              while gap_count > 0:
-                info[c]['Windows'].pop()
-                gap_count -= 1
-                chr_window -= 1
-            window_start += window_size
-            window_reads_count = 0
-        # <- while
-    # <- for
-    if window_reads_count != 0:
-      info[c]['Windows'].append(max_window * window_start + window_reads_count)
+    for read in data[c] :
+      strand, init = read%1000, read/1000
+      w_init = init/window_size * window_size
+      if last_init + window_size + gap_size > init - window_size :
+        k = 1
+        while wlist[c][-1]/max_window < w_init :
+          wlist[c].append((last_w_init_x + k * window_size) * max_window + 0)
+          k += 1
+      if wlist[c][-1]/max_window == w_init :
+        wlist[c][-1] += 1
+        chr_window += 1
+      else :
+        wlist[c].append(w_init * max_window + 1)
+        chr_window += 1
+      last_init = init
+      last_w_init_x = last_init/window_size * window_size
     tbl.append([c, chr_window])
-    
-    del info[c]['Data']
-    #for name in info[c] :
-    #  if name != 'Windows' : del info[c][name]
 
   msg = "Eligible windows of {} bp with allowed gap_size {} bp"
-  logging.info(msg.format(window_size, window_size * gap))
+  logging.info(msg.format(window_size, window_size * gap_size))
   msg = "Chromosome name, Eligible windows:\n{}"
   logging.info(msg.format(beautiful_table(tbl)))
+  return wlist
 
-  return info
 
-def write_islands(info, lambdaa, wsize, l0, threshold, resultf, offset):
-  f = open(resultf, 'w+'); islands = 0; coverage = 0
+# ---------------------------------------------------------------------------- #
+def islands(wlist, l0, plambda, window_size, threshold, resultf):
+  f = open(resultf, 'w+')
+  islands = 0; coverage = 0
 
   def score(reads):
-    if reads >= l0:
-      temp = scipy.stats.poisson.pmf(reads, lambdaa)
-      if temp < 1e-320: window_score = 1000
-      else: window_score = -numpy.log(temp)
-    else:
-      window_score = 0
-    return window_score
-
-  def write(c, e) :
-    if e['score'] < threshold : return 0, 0
-    f.write(c+'\t'+str(e['from'])+'\t'+str(e['to'])+'\t'+str(e['score'])+'\t'+str(e['reads'])+'\t'+str(e['count'] - e['gaps'])+'\t'+str(e['gaps'])+'\n')
-    return 1, (e['to'] - e['from'])
+    if reads <= l0 : return 0
+    t = scipy.stats.poisson.pmf(reads, plambda)
+    return 1000 if t < 1e-320 else -numpy.log(t)
 
   def new_island(init, reads):
     return { 
       'from'  : init,
-      'to'    : init + wsize,
+      'to'    : init + window_size,
       'score' : score(reads),
       'reads' : reads, 
       'count' : 1, 
       'gaps'  : 0
     }
 
-  for c in info :
+  def write(chromosome, e) :
+    if e['score'] < threshold : return 0, 0
+    f.write(chromosome  + '\t' 
+      + str(e['from'])  + '\t'
+      + str(e['to'])    + '\t'
+      + str(e['to'] - e ['from']) + '\t-\t-\t'
+      + str(e['score']) + '\t'
+      + str(e['reads']) + '\t'
+      + str(e['count'] - e['gaps']) + '\t'
+      + str(e['gaps']) + '\n'
+    )
+    return 1, (e['to'] - e['from'])
+
+  for c in wlist :
     island = False
-    for w in info[c]['Windows'] :
-      reads = w % max_window
-      init = (w - reads)/max_window
+    for w in wlist[c] :
+      reads, init = w%max_window, w/max_window
       if not island :
         island = new_island(init, reads)
       else :
         # Same island
         if init == island['to'] :
-          island['to'] += wsize
+          island['to'] += window_size
           island['count'] += 1
           island['reads'] += reads
           island['score'] += score(reads)
@@ -360,8 +338,6 @@ def write_islands(info, lambdaa, wsize, l0, threshold, resultf, offset):
     if island :
       i, cov = write(c, island)
       islands += i; coverage += cov
-      # islands += write(c, island)
-
   # <- end for
   f.close()
   return islands, coverage
