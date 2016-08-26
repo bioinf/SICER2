@@ -19,16 +19,19 @@ chmod +x SICER2
 #### Optional arguments:
 ~~~
   -t,  --input      Path to `input.bam` file
-  -w,  --window     Window size (bp).  DEFAULT: 200
-  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]  DEFAULT: auto
-  -g,  --gap        Gap size shows how many bases could be skipped  DEFAULT: 200
-  -p,  --pvalue     P-value; has to be in [0.0, 1.0]  DEFAULT: 0.1
-  -x,  --threshold  Island score threshold  DEFAULT: 0
+  -o,  --output     Output file name
+  -l,  --log        Output log file name
+  -w,  --window     Window size (bp). Default: 200
+  -f,  --fragment   Fragment size (bp). Default: 250
+  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]. Default: auto
+  -g,  --gap        Gap size shows how many bases could be skipped. Default: 200
+  -p,  --pvalue     P-value; has to be in [0.0, 1.0]. Default: 0.2
+  -x,  --threshold  Island score threshold. Default: 0
 ~~~
 
 #### Examples:
 
 ~~~
 ./SICER2 input.bam
-./SICER2 -t input.bam -c control.bam -w 100 -g 100 -e 0.845
+./SICER2 -t input.bam -w 200 -g 600 -e 0.77
 ~~~
