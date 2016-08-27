@@ -23,7 +23,7 @@ class AParser(argparse.ArgumentParser) :
     print '  -e,  --gms        Proportion of effective genome length; has to be in [0.0, 1.0]. Default: auto'
     print '  -g,  --gap        Gap size shows how many bases could be skipped. Default: 200'
     print '  -p,  --pvalue     P-value; has to be in [0.0, 1.0]. Default: 0.2'
-    print '  -x,  --threshold  Island score threshold. Default: 0'
+    print '  -x,  --threshold  Island score threshold. Default: auto'
     print ''
     print 'Examples:'
     print '  ./' + app + ' input.bam'
@@ -45,8 +45,8 @@ parser.add_argument('-w', '--window',    default = 200, type = int)
 parser.add_argument('-f', '--fragment',  default = 'auto')
 parser.add_argument('-e', '--gms',       default = 'auto')
 parser.add_argument('-g', '--gap',       default = 200, type = int)
-parser.add_argument('-p', '--pvalue',    default = 0.1, type = float)
-parser.add_argument('-x', '--threshold', default = 0, type = float)
+parser.add_argument('-p', '--pvalue',    default = 0.2, type = float)
+parser.add_argument('-x', '--threshold', default = 'auto')
 
 if len(sys.argv) == 1 :
   parser.help_message()
@@ -78,6 +78,11 @@ try :
   fragmentsize = float(args.fragment)
 except :
   fragmentsize = 0
+
+try :
+  threshold = float(args.threshold)
+except :
+  threshold = 0
 
 if args.control : cmd.append('--control ' + str(args.control.name))
 if args.output  : cmd.append('--output ' + str(args.output.name))

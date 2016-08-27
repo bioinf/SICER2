@@ -7,6 +7,7 @@ appname="SICER2"
 rm -f $appname
 cat src/init.py >> $appname
 cat src/pybam.py >> $appname
+cat src/island_threshold.py >> $appname
 cat src/species.py >> $appname
 cat src/functions.py >> $appname
 cat src/application.py >> $appname

@@ -115,7 +115,7 @@ def get_gms(info, length, gms) :
 # ---------------------------------------------------------------------------- #
 def count_lambda(unique_reads_count, wsize, effective_length):
   plambda = float(wsize) * float(unique_reads_count) / float(effective_length)
-  msg = "Average density of reads per {} bp window is {}"
+  msg = "Average density of reads per {} bp window: {}"
   logging.info(msg.format(wsize, round(plambda, 2)))
   return plambda
 
@@ -244,21 +244,28 @@ def preparation(track, gms) :
   effective_len = get_gms(info, mean_length, gms) * sum(track.chromosome_lengths)
   plambda = count_lambda(unique_reads, args.window, effective_len)
 
-  return [data, mean_length, fragment_size, plambda]
+  logging.info("")
+  logging.info("Genome Length:           {}".format(sum(track.chromosome_lengths)))
+  logging.info("Effective genome Length: {}".format(effective_len))
 
+  return [data, mean_length, fragment_size, plambda, total_reads, effective_len]
 
 
 # ---------------------------------------------------------------------------- #
 def windows(data, length, window_size, gap_size):
   keys = sorted(data.keys(), key = lambda (c): chrsort(c))
-  tbl = []
+  tbl = []; eligible = 0; gaps = [0,0,0,0]
   for c in keys :
     wlist = array.array('l', [0])
     last_init = -max_window
     last_w_init_x = 0
-    chr_window = 0
+    chr_windows = 0
     for read in data[c] :
       strand, init = read%1000, read/1000
+      if init == last_init : continue
+      gp = (init - last_init)/window_size
+      if gp <= 3 : gaps[gp] += 1
+
       w_init = init/window_size * window_size
       if last_init + window_size + gap_size > init - window_size :
         k = 1
@@ -267,19 +274,27 @@ def windows(data, length, window_size, gap_size):
           k += 1
       if wlist[-1]/max_window == w_init :
         wlist[-1] += 1
-        chr_window += 1
+        chr_windows += 1
       else :
         wlist.append(w_init * max_window + 1)
-        chr_window += 1
+        chr_windows += 1
       last_init = init
       last_w_init_x = last_init/window_size * window_size
-    tbl.append([c, chr_window])
+    tbl.append([c, chr_windows])
+    eligible += chr_windows
     data[c] = wlist
 
-  msg = "Eligible windows of {} bp with allowed gap_size {} bp"
-  logging.info(msg.format(window_size, window_size * gap_size))
+  msg = "Total eligible windows of {}bp with allowed gap size {}bp: {}"
+  logging.info(msg.format(window_size, gap_size, chr_windows))
+
   msg = "Chromosome name, Eligible windows:\n{}"
   logging.info(msg.format(beautiful_table(tbl)))
+
+  msg = "Gap size count:"
+  for i in range(4) :
+    msg += "\n  {:>3} - {:>3}bp: {}".format(i * window_size + 1, (i + 1) * window_size, gaps[i])
+  logging.info(msg)
+
   return data
 
 
@@ -303,23 +318,17 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
       'gaps'  : 0
     }
 
-  def write(chromosome, e) :
+  def write(chromosome, e, islands) :
     if e['score'] < threshold : return 0, 0
-    f.write(chromosome  + '\t' 
-      + str(e['from'])  + '\t'
-      + str(e['to'])    + '\t'
-      + str(e['score']) + '\t-\t-\t'
-      + str(e['reads']) + '\t'
-      + str(e['count'] - e['gaps']) + '\t'
-      + str(e['gaps']) + '\n'
-    )
+    f.write(chromosome +'\t' + str(e['from']) +'\t' + str(e['to'])+'\t' 'island_' + str(islands) +'\t' + str(e['score']) + '\n')
     return 1, (e['to'] - e['from'])
 
   for c in wlist :
     island = False
     for w in wlist[c] :
       reads, init = w%max_window, w/max_window
-      if reads not in reads_scores : reads_scores[reads] = score(reads)
+      if reads not in reads_scores : 
+        reads_scores[reads] = score(reads)
       if not island :
         island = new_island(init, reads)
       else :
@@ -332,12 +341,12 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
           if reads == 0 : island['gaps'] += 1
         # Other island
         else :
-          i, cov = write(c, island)
+          i, cov = write(c, island, islands)
           islands += i; coverage += cov
           island = new_island(init, reads)
     # <- end for
     if island :
-      i, cov = write(c, island)
+      i, cov = write(c, island, islands)
       islands += i; coverage += cov
   # <- end for
   f.close()
