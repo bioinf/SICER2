@@ -1,6 +1,7 @@
 #!/usr/bin/php
 # Usage:
 # ./memory.php ibezdvornykh
+# ./memory.php ibezdvornykh nm
 <?php
 $data = array(); 
 $x = 0;
@@ -17,9 +18,21 @@ while (true) {
 		exec("cat /proc/$pid/status | grep VmSize | awk {'print $2,$3'}", $mem);
 		$sum = 0;
 		foreach ($mem as $m) $sum += (int) $m;
+		
+		$key = $pid;
+		if (@$_SERVER['argv'][2] == 'nm') {
+			$nm = array();
+			exec("cat /proc/$pid/cmdline", $nm);
+			if (@$nm[0]) {
+				preg_match_all("/^(.*)\/(.*).bam(.*)$/", @$nm[0], $mm);
+				$key = @$mm[2][0] ? $mm[2][0] : $pid;
+			} else {
+				continue;
+			}
+		}
 
-		$data[$pid][] = array(time(), $sum);
-		echo "\r$pid\tMemory: $sum [{$x}] ";
+		$data[$key][] = array(time(), $sum);
+		echo "\r$key\tMemory: $sum\t[{$x}]";
 	}
 	usleep(500000);
 	$x++;

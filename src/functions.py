@@ -134,6 +134,7 @@ def preparation(track, gms) :
     c = track.chromosome_names[chr]
     if l_seq not in length_hist : length_hist[l_seq] = 0
     length_hist[l_seq] += 1
+    pos += l_seq/2
 
     # New chromosome name:
     if c not in info : 
@@ -198,15 +199,15 @@ def preparation(track, gms) :
   logging.info(msg.format(drate, total_reads, unique_reads))
   
   notes = [
-    [99 , "  - Reads mapped in proper pair. Mate reverse strand, first in pair:  {}"],
-    [147, "  - Reads mapped in proper pair. Read reverse strand, second in pair: {}"],
-    [83 , "  - Reads mapped in proper pair. Read reverse strand, first in pair:  {}"],
-    [163, "  - Reads mapped in proper pair. Mate reverse strand, second in pair: {}"],
-  			 
-    [97 , "  - Mate reverse strand, first in pair:                               {}"],
-    [161, "  - Mate reverse strand, second in pair:                              {}"],
-    [81 , "  - Read reverse strand, first in pair:                               {}"],
-    [145, "  - Read reverse strand, second in pair:                              {}"],
+    [99 , "  - Reads mapped in proper pair. Mate reverse strand, first in pair:  {}"], # +
+    [147, "  - Reads mapped in proper pair. Read reverse strand, second in pair: {}"], # +
+    [83 , "  - Reads mapped in proper pair. Read reverse strand, first in pair:  {}"], # -
+    [163, "  - Reads mapped in proper pair. Mate reverse strand, second in pair: {}"], # -
+
+    [97 , "  - Mate reverse strand, first in pair:                               {}"], #
+    [161, "  - Mate reverse strand, second in pair:                              {}"], # -
+    [81 , "  - Read reverse strand, first in pair:                               {}"], # +
+    [145, "  - Read reverse strand, second in pair:                              {}"], #
   			 
     [113, "  - Mate reverse strand, Read reverse strand, first in pair:          {}"],
     [177, "  - Mate reverse strand, Read reverse strand, second in pair:         {}"],
@@ -252,25 +253,37 @@ def preparation(track, gms) :
 
 
 # ---------------------------------------------------------------------------- #
-def windows(data, length, window_size, gap_size):
+def windows(data, length, fragment, window_size, gap_size):
   keys = sorted(data.keys(), key = lambda (c): chrsort(c))
-  tbl = []; eligible = 0; gaps = [0,0,0,0]
+  tbl = []; eligible = 0; gaps = [0,0,0,0] # gaps - histogram
   for c in keys :
     wlist = array.array('l', [0])
     last_init = -max_window
-    last_w_init_x = 0
     chr_windows = 0
     for read in data[c] :
       strand, init = read%1000, read/1000
+      # ---
+      if strand == 0 : 
+        init += fragment/2
+      if strand == 16 : 
+        init -= fragment/2
+      # --->   <---
+      if strand == 99 or strand == 147 or strand == 81  : 
+        init += fragment/2
+      if strand == 83 or strand == 163 or strand == 161 : 
+        init -= fragment/2
+
       if init == last_init : continue
       gp = (init - last_init)/window_size
       if gp <= 3 : gaps[gp] += 1
 
       w_init = init/window_size * window_size
-      if last_init + window_size + gap_size > init - window_size :
+      w_last_init = last_init/window_size * window_size
+      
+      if w_last_init + gap_size/window_size >= w_init :
         k = 1
         while wlist[-1]/max_window < w_init :
-          wlist.append((last_w_init_x + k * window_size) * max_window + 0)
+          wlist.append((w_last_init + k * window_size) * max_window + 0)
           k += 1
       if wlist[-1]/max_window == w_init :
         wlist[-1] += 1
@@ -278,8 +291,8 @@ def windows(data, length, window_size, gap_size):
       else :
         wlist.append(w_init * max_window + 1)
         chr_windows += 1
+
       last_init = init
-      last_w_init_x = last_init/window_size * window_size
     tbl.append([c, chr_windows])
     eligible += chr_windows
     data[c] = wlist
