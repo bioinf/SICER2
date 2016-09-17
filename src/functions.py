@@ -334,11 +334,11 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf, fragment):
 
   def write(chromosome, e, islands) :
     if e['score'] < threshold: return 0, 0
-    d = e['to'] - e['from'] - fragment
-    if d <= 0 : return 0, 0
-    name = 'is_' + str(e['from']) + '_' + str(e['to'])
+    island_size = e['to'] - e['from'] - fragment
+    if island_size < 30 : return 0, 0
+    name = 'is_' + str(islands)
     f.write(chromosome +'\t' + str(e['from'] + fragment/2) +'\t' + str(e['to'] - fragment/2)+'\t' + name +'\t' + str(e['score']) + '\n')
-    return 1, d
+    return 1, island_size
 
   for c in wlist :
     island = False
