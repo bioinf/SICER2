@@ -40,7 +40,7 @@ else :
   threshold = bg.threshold
   logging.info("The score threshold is: {} (auto define)".format(threshold))
 
-found, coverage = islands(wlist, l0, plambda, args.window, threshold, resultf)
+found, coverage = islands(wlist, l0, plambda, args.window, threshold, resultf, fragment)
 coverage_txt = str(coverage) + ' bp'
 if coverage > 1000000 :
   coverage_txt = str(float(coverage)/1000000) + ' Mbp (' + coverage_txt + ')'

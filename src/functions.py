@@ -262,6 +262,7 @@ def windows(data, length, fragment, window_size, gap_size):
     chr_windows = 0
     for read in data[c] :
       strand, init = read%1000, read/1000
+      '''
       # ---
       if strand == 0 : 
         init += fragment/2
@@ -272,6 +273,7 @@ def windows(data, length, fragment, window_size, gap_size):
         init += fragment/2
       if strand == 83 or strand == 163 or strand == 161 : 
         init -= fragment/2
+      '''
 
       if init == last_init : continue
       gp = (init - last_init)/window_size
@@ -296,7 +298,6 @@ def windows(data, length, fragment, window_size, gap_size):
     tbl.append([c, chr_windows])
     eligible += chr_windows
     data[c] = wlist
-
   msg = "Total eligible windows of {}bp with allowed gap size {}bp: {}"
   logging.info(msg.format(window_size, gap_size, chr_windows))
 
@@ -312,7 +313,7 @@ def windows(data, length, fragment, window_size, gap_size):
 
 
 # ---------------------------------------------------------------------------- #
-def islands(wlist, l0, plambda, window_size, threshold, resultf):
+def islands(wlist, l0, plambda, window_size, threshold, resultf, fragment):
   f = open(resultf, 'w+')
   islands = 0; coverage = 0; reads_scores = {}
 
@@ -332,14 +333,18 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf):
     }
 
   def write(chromosome, e, islands) :
-    if e['score'] < threshold : return 0, 0
-    f.write(chromosome +'\t' + str(e['from']) +'\t' + str(e['to'])+'\t' 'island_' + str(islands) +'\t' + str(e['score']) + '\n')
-    return 1, (e['to'] - e['from'])
+    if e['score'] < threshold: return 0, 0
+    d = e['to'] - e['from'] - fragment
+    if d <= 0 : return 0, 0
+    name = 'is_' + str(e['from']) + '_' + str(e['to'])
+    f.write(chromosome +'\t' + str(e['from'] + fragment/2) +'\t' + str(e['to'] - fragment/2)+'\t' + name +'\t' + str(e['score']) + '\n')
+    return 1, d
 
   for c in wlist :
     island = False
     for w in wlist[c] :
       reads, init = w%max_window, w/max_window
+      if reads < l0 : continue
       if reads not in reads_scores : 
         reads_scores[reads] = score(reads)
       if not island :
