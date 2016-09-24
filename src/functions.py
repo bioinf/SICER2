@@ -134,7 +134,7 @@ def preparation(track, gms) :
     c = track.chromosome_names[chr]
     if l_seq not in length_hist : length_hist[l_seq] = 0
     length_hist[l_seq] += 1
-    pos += l_seq/2
+    # pos += l_seq/2
 
     # New chromosome name:
     if c not in info : 
@@ -253,48 +253,48 @@ def preparation(track, gms) :
 
 
 # ---------------------------------------------------------------------------- #
-def windows(data, length, fragment, window_size, gap_size):
+def windows(data, length, fragment, window_size, gap_size, l0):
   keys = sorted(data.keys(), key = lambda (c): chrsort(c))
   tbl = []; eligible = 0; gaps = [0,0,0,0] # gaps - histogram
   for c in keys :
-    wlist = array.array('l', [0])
+    # wlist = array.array('l', [])
+    wlist = []
     last_init = -max_window
     chr_windows = 0
     for read in data[c] :
       strand, init = read%1000, read/1000
-      '''
-      # ---
-      if strand == 0 : 
-        init += fragment/2
-      if strand == 16 : 
-        init -= fragment/2
-      # --->   <---
-      if strand == 99 or strand == 147 or strand == 81  : 
-        init += fragment/2
-      if strand == 83 or strand == 163 or strand == 161 : 
-        init -= fragment/2
-      '''
-
-      if init == last_init : continue
       gp = (init - last_init)/window_size
       if gp <= 3 : gaps[gp] += 1
 
       w_init = init/window_size * window_size
       w_last_init = last_init/window_size * window_size
-      
-      if w_last_init + gap_size/window_size >= w_init :
-        k = 1
-        while wlist[-1]/max_window < w_init :
-          wlist.append((w_last_init + k * window_size) * max_window + 0)
-          k += 1
-      if wlist[-1]/max_window == w_init :
+
+      if w_last_init == w_init :
         wlist[-1] += 1
         chr_windows += 1
       else :
         wlist.append(w_init * max_window + 1)
         chr_windows += 1
-
       last_init = init
+    # <- for read in data[c]
+
+    wlist_good = [] # array.array('l', [])
+    for i in wlist :
+      if i%max_window >= l0 :
+        wlist_good.append(i)
+
+    last_init = -max_window
+    wlist = array.array('l', [0])
+    for i in wlist_good :
+      reads, init = i%max_window, i/max_window
+      if last_init + window_size + gap_size > init:
+         gg = (init - last_init - window_size)/window_size
+         for k in range(gg) :
+           wlist.append((last_init + (k + 1) * window_size) * max_window)
+      wlist.append(i)
+      last_init = init
+    # <- FOR
+
     tbl.append([c, chr_windows])
     eligible += chr_windows
     data[c] = wlist
@@ -310,7 +310,6 @@ def windows(data, length, fragment, window_size, gap_size):
   logging.info(msg)
 
   return data
-
 
 # ---------------------------------------------------------------------------- #
 def islands(wlist, l0, plambda, window_size, threshold, resultf, fragment):
@@ -334,17 +333,18 @@ def islands(wlist, l0, plambda, window_size, threshold, resultf, fragment):
 
   def write(chromosome, e, islands) :
     if e['score'] < threshold: return 0, 0
-    island_size = e['to'] - e['from'] - fragment
+    island_size = e['to'] - e['from']#  - fragment
     if island_size < 30 : return 0, 0
     name = 'is_' + str(islands)
-    f.write(chromosome +'\t' + str(e['from'] + fragment/2) +'\t' + str(e['to'] - fragment/2)+'\t' + name +'\t' + str(e['score']) + '\n')
+    # f.write(chromosome +'\t' + str(e['from'] + fragment/2) +'\t' + str(e['to'] - fragment/2)+'\t' + name +'\t' + str(e['score']) + '\n')
+    f.write(chromosome +'\t' + str(e['from']) +'\t' + str(e['to'])+'\t' + name +'\t' + str(e['score']) + '\n')
     return 1, island_size
 
   for c in wlist :
     island = False
     for w in wlist[c] :
       reads, init = w%max_window, w/max_window
-      if reads < l0 : continue
+      # if reads < l0 : continue
       if reads not in reads_scores : 
         reads_scores[reads] = score(reads)
       if not island :

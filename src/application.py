@@ -26,7 +26,7 @@ logging.info(msg.format(l0, l0, pvalue))
 print 'Step 2 of 3: Making window list'
 
 if args.window < 1 : args.window = 1
-wlist = windows(data, length, fragment, args.window, gap_size)
+wlist = windows(data, length, fragment, args.window, gap_size, l0)
 
 # ---------------------------------------------------------------------------- #
 
@@ -62,3 +62,4 @@ logging.info(('\n ').join([
 msg = "\nFinished. Elapsed time, seconds: {}"
 logging.info(msg.format(round(time.time() - startTime, 2)))
 logging.info("\n")
+
