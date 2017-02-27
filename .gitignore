@@ -1,2 +1,3 @@
-tmp/*.nb
+tmp/_*.nb
 tmp/tdfs*
+tmp/beds*

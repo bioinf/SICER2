@@ -6,9 +6,18 @@ Our re-implementation of SICER broad peak calling algorithm
 ### Install latest version:
 
 ~~~
-curl https://raw.githubusercontent.com/bioinf/SICER2/master/SICER2 > SICER2
+curl https://raw.githubusercontent.com/bioinf/SICER2/master/build/SICER2 > SICER2
 chmod +x SICER2
 ~~~
+
+### How to build your own SICER2:
+
+~~~
+git clone https://github.com/bioinf/SICER2.git
+cd SICER2/src
+make
+~~~
+
 
 ### Usage:
 

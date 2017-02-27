@@ -1,4 +1,4 @@
-appname="../SICER2"
+appname="../build/SICER2"
 
 all:
 	rm -f $(appname)
